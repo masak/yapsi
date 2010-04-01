@@ -1,0 +1,24 @@
+#!/usr/bin/alpha
+use v6;
+
+use Yapsi;
+
+my $program;
+if @*ARGS == 2 && @*ARGS[0] eq '-e' {
+    $program = @*ARGS[1];
+}
+elsif @*ARGS == 1 {
+    $program = slurp @*ARGS[0];
+}
+else {
+    die "Usage: `$*PROGRAM_NAME <file>` or `$*PROGRAM_NAME -e '<program>'`";
+}
+
+try {
+    my Yapsi::Compiler $compiler .= new;
+    my Yapsi::Runtime $runtime .= new;
+
+    my @sic = $compiler.compile($program);
+    $runtime.run(@sic);
+}
+say $! if $!;

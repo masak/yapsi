@@ -1,0 +1,50 @@
+= Yapsi -- Yet Another Perl Six Implementation
+
+This is an implementation of a Perl 6 compiler-and-runtime in Perl 6. It
+currently runs off the old, pre-refactor branch of Rakudo known as 'alpha'.
+
+Right now you can do things like this:
+
+$ ./yapsi -e 'say 42'
+42
+
+$ ./yapsi -e 'my $a = 5; say $a'
+5
+
+$ ./yapsi -e 'my $a = 5; my $b := $a; $b = 42; say $a'
+42
+
+In other words, Yapsi currently handles declaration, assignment, binding,
+and a very basic 'say' instruction.
+
+The compiler also detects use-before-declaration and syntax errors.
+
+$ ./yapsi -e '$a; my $a'
+Invalid. $a not declared before use
+
+$ ./yapsi -e 'say say'
+Could not parse
+
+== Near-future directions
+
+Things we hope to implement in the immediate future:
+
+* Blocks
+* If statements
+* Loops
+* Function calls
+
+== Raison d'etre
+
+Besides being useful as a p6-in-p6 implementation, Yapsi also might work as
+a fast vehicle for exploring the following underexplored areas of the Perl 6
+spec:
+
+* Phasers
+* Constant folding
+* Early catching of errors
+* Increased communication between compiler and runtime
+
+== License
+
+Yapsi is released under Artistic 2.0. See LICENSE.
