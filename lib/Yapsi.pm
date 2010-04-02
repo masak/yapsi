@@ -204,7 +204,7 @@ class Yapsi::Compiler {
 class Yapsi::Runtime::IO {
     method say($message) {
         # TODO: how to make this use Perl 6's say? :)
-        print  $message, "\n";
+        print $message, "\n";
     }
 }
 
