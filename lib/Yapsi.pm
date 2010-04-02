@@ -201,7 +201,16 @@ class Yapsi::Compiler {
     }
 }
 
+class Yapsi::Runtime::IO {
+    method say($message) {
+        # TODO: how to make this use Perl 6's say? :)
+        print  $message, "\n";
+    }
+}
+
 class Yapsi::Runtime {
+    has Yapsi::Runtime::IO $!IO;
+
     method run(@sic) {
         my @r;
         my %pad;
@@ -243,7 +252,7 @@ class Yapsi::Runtime {
                 %pad{~$0} = { :type<immediate>, :value(+$1) };
             }
             when /^ 'say $'(\d+) $/ {
-                say @r[+$0]
+                $!IO.say: @r[+$0];
             }
             default { die "Couldn't handle instruction `$_`" }
         }
