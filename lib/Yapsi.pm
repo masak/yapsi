@@ -201,15 +201,10 @@ class Yapsi::Compiler {
     }
 }
 
-class Yapsi::Runtime::IO {
-    method say($message) {
-        # RAKUDO: Can't use say in a method say [perl #74014]
-        print $message, "\n";
-    }
-}
+subset Yapsi::IO where { .can('say') }
 
 class Yapsi::Runtime {
-    has Yapsi::Runtime::IO $!IO;
+    has Yapsi::IO $!io = $*OUT;
 
     method run(@sic) {
         my @r;
@@ -252,7 +247,7 @@ class Yapsi::Runtime {
                 %pad{~$0} = { :type<immediate>, :value(+$1) };
             }
             when /^ 'say $'(\d+) $/ {
-                $!IO.say: @r[+$0];
+                $!io.say: @r[+$0];
             }
             default { die "Couldn't handle instruction `$_`" }
         }

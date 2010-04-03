@@ -16,7 +16,7 @@ else {
 
 try {
     my Yapsi::Compiler $compiler .= new;
-    my Yapsi::Runtime $runtime .= new(IO => Yapsi::Runtime::IO.new);
+    my Yapsi::Runtime $runtime .= new;
 
     my @sic = $compiler.compile($program);
     $runtime.run(@sic);
