@@ -4,14 +4,17 @@ grammar Yapsi::Perl6::Grammar {
     regex TOP { ^ <statement> ** ';' $ }
     token statement { <expression> || '' }
     token expression { <assignment> || <binding> || <variable> || <literal>
-                       || <declaration> || <saycall> }
-    token lvalue { <declaration> || <variable> }
+                       || <declaration> || <saycall> || <increment> }
+    token lvalue { <declaration> || <variable> || <increment> }
+    token value { <variable> || <literal> || <declaration> || <saycall>
+                  || <increment> }
     token variable { '$' \w+ }
     token literal { \d+ }
     rule  declaration { 'my' <variable> }
     rule  assignment { <lvalue> '=' <expression> }
     rule  binding { <lvalue> ':=' <expression> }
     rule  saycall { 'say' <expression> }  # very temporary solution
+    rule  increment { '++' <value> }
 }
 
 my %d; # a variable gets an entry in %d when it's declared
@@ -23,7 +26,8 @@ multi sub find-vars(Match $/, 'statement') {
 }
 
 multi sub find-vars(Match $/, 'expression') {
-    for <assignment binding variable declaration saycall> -> $subrule {
+    for <assignment binding variable declaration saycall
+         increment> -> $subrule {
         if $/{$subrule} -> $e {
             find-vars($e, $subrule);
         }
@@ -32,6 +36,14 @@ multi sub find-vars(Match $/, 'expression') {
 
 multi sub find-vars(Match $/, 'lvalue') {
     for <variable declaration> -> $subrule {
+        if $/{$subrule} -> $e {
+            find-vars($e, $subrule);
+        }
+    }
+}
+
+multi sub find-vars(Match $/, 'value') {
+    for <variable declaration saycall increment> -> $subrule {
         if $/{$subrule} -> $e {
             find-vars($e, $subrule);
         }
@@ -69,6 +81,10 @@ multi sub find-vars(Match $/, 'saycall') {
     find-vars($<expression>, 'expression');
 }
 
+multi sub find-vars(Match $/, 'increment') {
+    find-vars($<value>, 'value');
+}
+
 multi sub find-vars($/, $node) {
     die "Don't know what to do with a $node";
 }
@@ -95,7 +111,15 @@ multi sub sicify(Match $/, 'expression') {
 }
 
 multi sub sicify(Match $/, 'lvalue') {
-    for <variable declaration> -> $subrule {
+    for <variable declaration increment> -> $subrule {
+        if $/{$subrule} -> $e {
+            return sicify($e, $subrule);
+        }
+    }
+}
+
+multi sub sicify(Match $/, 'value') {
+    for <variable literal declaration saycall increment> -> $subrule {
         if $/{$subrule} -> $e {
             return sicify($e, $subrule);
         }
@@ -143,6 +167,12 @@ multi sub sicify(Match $/, 'saycall') {
     push @sic, "say $register";
     push @sic, "$result = 1";
     return ($result, 1);
+}
+
+multi sub sicify(Match $/, 'increment') {
+    my ($register, $variable) = sicify($<value>, 'value');
+    push @sic, "inc $register";
+    return ($register, $variable);
 }
 
 multi sub sicify(Match $/, $node) {

@@ -20,6 +20,10 @@ my @programs-that-parse =
     'my $a := 42; my $b = $a;',
     'my $a; my $b := $a; $a = 42',
     'my $a; say $a',
+    'my $a; ++$a',
+    '++my $a',
+    '++my $a = 42',
+    '++42',
 ;
 
 for @programs-that-parse -> $program {
