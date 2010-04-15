@@ -20,6 +20,8 @@ my @tests =
     'say my $a',                       "Any()\n",   'uninitialized',
     'say say 42',                      "42\n1\n",   'return value of say',
     'my $a = 42; my $a; say $a',       "42\n",      'same scope, same var',
+    'my $a = 42; say ++$a',            "43\n",      'prefix increment',
+    'my $a; say ++$a',                 "1\n",       'increment undefined',
 ;
 
 for @tests -> $program, $expected, $message {

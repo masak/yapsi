@@ -103,7 +103,8 @@ multi sub sicify(Match $/, 'statement') {
 }
 
 multi sub sicify(Match $/, 'expression') {
-    for <variable literal declaration assignment binding saycall> -> $subrule {
+    for <variable literal declaration assignment binding saycall
+         increment> -> $subrule {
         if $/{$subrule} -> $e {
             return sicify($e, $subrule);
         }
@@ -172,6 +173,7 @@ multi sub sicify(Match $/, 'saycall') {
 multi sub sicify(Match $/, 'increment') {
     my ($register, $variable) = sicify($<value>, 'value');
     push @sic, "inc $register";
+    push @sic, "store $variable, $register";
     return ($register, $variable);
 }
 
@@ -248,7 +250,7 @@ class Yapsi::Runtime {
                 }
             }
             when /^ '$'(\d+) ' = ' (\d+) $/ {
-                @r[+$0] = $1
+                @r[+$0] = +$1
             }
             when /^ 'store ' \'(<-[']>+)\' ', $'(\d+) $/ {
                 my $thing = %pad{~$0};
@@ -278,6 +280,14 @@ class Yapsi::Runtime {
             }
             when /^ 'say $'(\d+) $/ {
                 $!io.say: @r[+$0];
+            }
+            when /^ 'inc $'(\d+) $/ {
+                if @r[+$0] eq 'Any()' {
+                    @r[+$0] = 1;
+                }
+                else {
+                    ++@r[+$0];
+                }
             }
             default { die "Couldn't handle instruction `$_`" }
         }
