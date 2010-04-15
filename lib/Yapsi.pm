@@ -138,7 +138,7 @@ multi sub sicify(Match $/, 'literal') {
     my $register = unique-register;
     my $literal = ~$/;
     push @sic, "$register = $literal";
-    return ($register, $literal);
+    return ($register, '<constant>');
 }
 
 multi sub sicify(Match $/, 'declaration') {
@@ -172,6 +172,8 @@ multi sub sicify(Match $/, 'saycall') {
 
 multi sub sicify(Match $/, 'increment') {
     my ($register, $variable) = sicify($<value>, 'value');
+    die "Can't increment a constant"
+        if $variable eq '<constant>';
     push @sic, "inc $register";
     push @sic, "store $variable, $register";
     return ($register, $variable);

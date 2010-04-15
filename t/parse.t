@@ -23,7 +23,6 @@ my @programs-that-parse =
     'my $a; ++$a',
     '++my $a',
     '++my $a = 42',
-    '++42',
 ;
 
 for @programs-that-parse -> $program {
@@ -45,6 +44,7 @@ my @programs-that-don't-parse =   # '
     '42 := my $a',
     'say $a',
     'say $a; my $a',
+    '++42',
 ;
 
 for @programs-that-don't-parse -> $program { # '
