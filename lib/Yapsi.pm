@@ -17,221 +17,223 @@ grammar Yapsi::Perl6::Grammar {
     rule  increment { '++' <value> }
 }
 
-my %d; # a variable gets an entry in %d when it's declared
-
-multi sub find-vars(Match $/, 'statement') {
-    if $<expression> -> $e {
-        find-vars($e, 'expression');
-    }
-}
-
-multi sub find-vars(Match $/, 'expression') {
-    for <assignment binding variable declaration saycall
-         increment> -> $subrule {
-        if $/{$subrule} -> $e {
-            find-vars($e, $subrule);
-        }
-    }
-}
-
-multi sub find-vars(Match $/, 'lvalue') {
-    for <variable declaration> -> $subrule {
-        if $/{$subrule} -> $e {
-            find-vars($e, $subrule);
-        }
-    }
-}
-
-multi sub find-vars(Match $/, 'value') {
-    for <variable declaration saycall increment> -> $subrule {
-        if $/{$subrule} -> $e {
-            find-vars($e, $subrule);
-        }
-    }
-}
-
-multi sub find-vars(Match $/, 'variable') {
-    if !%d.exists( ~$/ ) {
-        die "Invalid. $/ not declared before use";
-    }
-}
-
-multi sub find-vars(Match $/, 'literal') {
-    die "This multi variant should never be called";
-}
-
-multi sub find-vars(Match $/, 'declaration') {
-    my $name = ~$<variable>;
-    if %d{$name}++ {
-        $*ERR.say: "Useless redeclaration of variable $name";
-    }
-}
-
-multi sub find-vars(Match $/, 'assignment') {
-    find-vars($<lvalue>, 'lvalue');
-    find-vars($<expression>, 'expression');
-}
-
-multi sub find-vars(Match $/, 'binding') {
-    find-vars($<lvalue>, 'lvalue');
-    find-vars($<expression>, 'expression');
-}
-
-multi sub find-vars(Match $/, 'saycall') {
-    find-vars($<expression>, 'expression');
-}
-
-multi sub find-vars(Match $/, 'increment') {
-    find-vars($<value>, 'value');
-}
-
-multi sub find-vars($/, $node) {
-    die "Don't know what to do with a $node";
-}
-
-my $c;
-sub unique-register {
-    return '$' ~ $c++;
-}
-
-my @sic;
-
-multi sub sicify(Match $/, 'statement') {
-    if $<expression> -> $e {
-        return sicify($e, 'expression');
-    }
-}
-
-multi sub sicify(Match $/, 'expression') {
-    for <variable literal declaration assignment binding saycall
-         increment> -> $subrule {
-        if $/{$subrule} -> $e {
-            return sicify($e, $subrule);
-        }
-    }
-}
-
-multi sub sicify(Match $/, 'lvalue') {
-    for <variable declaration increment> -> $subrule {
-        if $/{$subrule} -> $e {
-            return sicify($e, $subrule);
-        }
-    }
-}
-
-multi sub sicify(Match $/, 'value') {
-    for <variable literal declaration saycall increment> -> $subrule {
-        if $/{$subrule} -> $e {
-            return sicify($e, $subrule);
-        }
-    }
-}
-
-multi sub sicify(Match $/, 'variable') {
-    my $register = unique-register;
-    my $variable = "'$/'";
-    push @sic, "$register = fetch $variable";
-    return ($register, $variable);
-}
-
-multi sub sicify(Match $/, 'literal') {
-    my $register = unique-register;
-    my $literal = ~$/;
-    push @sic, "$register = $literal";
-    return ($register, '<constant>');
-}
-
-multi sub sicify(Match $/, 'declaration') {
-    return sicify($<variable>, 'variable');
-}
-
-multi sub sicify(Match $/, 'assignment') {
-    my ($register, $) = sicify($<expression>, 'expression');
-    my ($, $variable) = sicify($<lvalue>, 'lvalue');
-    push @sic, "store $variable, $register";
-    return ($register, $variable);
-}
-
-multi sub sicify(Match $/, 'binding') {
-    my ($register, $rightvar) = sicify($<expression>, 'expression');
-    my ($, $leftvar) = sicify($<lvalue>, 'lvalue');
-    if $rightvar ~~ / ^ \d+ $ / { # hm. this is brittle and suboptimal.
-        $rightvar = $register;
-    }
-    push @sic, "bind $leftvar, $rightvar";
-    return ($register, $leftvar);
-}
-
-multi sub sicify(Match $/, 'saycall') {
-    my ($register, $) = sicify($<expression>, 'expression');
-    my $result = unique-register;
-    push @sic, "say $register";
-    push @sic, "$result = 1";
-    return ($result, 1);
-}
-
-multi sub sicify(Match $/, 'increment') {
-    my ($register, $variable) = sicify($<value>, 'value');
-    die "Can't increment a constant"
-        if $variable eq '<constant>';
-    push @sic, "inc $register";
-    push @sic, "store $variable, $register";
-    return ($register, $variable);
-}
-
-multi sub sicify(Match $/, $node) {
-    die "Don't know what to do with a $node";
-}
-
-sub declutter(@instructions) {
-    my @decluttered;
-    for @instructions.kv -> $i, $line {
-        if $line !~~ / ^ ('$' \d+) ' =' / {
-            push @decluttered, $line;
-        }
-        else {
-            my $varname = ~$0;
-            my Bool $usages-later = False;
-            for $i+1 ..^ @instructions -> $j {
-                ++$usages-later if defined index(@instructions[$j], $varname);
-            }
-            if $usages-later {
-                push @decluttered, $line;
-            }
-        }
-    }
-    return @decluttered;
-}
-
-sub renumber(@instructions) {
-    my $number = 0;
-    my %mapping;
-    return @instructions.map: {
-        .subst( :global, / ('$' \d+) /, {
-            my $varname = ~$0;
-            if !%mapping.exists($varname) {
-                %mapping{$varname} = '$' ~ $number++;
-            }
-            %mapping{$varname}
-        } );
-    };
-}
-
 class Yapsi::Compiler {
+    has @.warnings;
+
+    has %!d;   # a variable gets an entry in %!d when it's declared
+    has $!c;   # unique register counter
+    has @!sic; # generated SIC statements
+
     method compile($program) {
+        @!warnings = ();
         die "Could not parse"
             unless Yapsi::Perl6::Grammar.parse($program);
-        %d = ();
+        %!d = ();
         for $<statement> -> $statement {
-            find-vars($statement, 'statement');
+            self.find-vars($statement, 'statement');
         }
-        $c = 0;
-        @sic = '`lexicals: <' ~ (join ' ', %d.keys) ~ '>';
+        $!c = 0;
+        @!sic = '`lexicals: <' ~ (join ' ', %!d.keys) ~ '>';
         for $<statement> -> $statement {
-            sicify($statement, 'statement');
+            self.sicify($statement, 'statement');
         }
-        @sic = renumber(declutter(@sic));
-        return @sic;
+        return renumber(declutter(@!sic));
+    }
+
+    multi method find-vars(Match $/, 'statement') {
+        if $<expression> -> $e {
+            self.find-vars($e, 'expression');
+        }
+    }
+
+    multi method find-vars(Match $/, 'expression') {
+        for <assignment binding variable declaration saycall
+             increment> -> $subrule {
+            if $/{$subrule} -> $e {
+                self.find-vars($e, $subrule);
+            }
+        }
+    }
+
+    multi method find-vars(Match $/, 'lvalue') {
+        for <variable declaration> -> $subrule {
+            if $/{$subrule} -> $e {
+                self.find-vars($e, $subrule);
+            }
+        }
+    }
+
+    multi method find-vars(Match $/, 'value') {
+        for <variable declaration saycall increment> -> $subrule {
+            if $/{$subrule} -> $e {
+                self.find-vars($e, $subrule);
+            }
+        }
+    }
+
+    multi method find-vars(Match $/, 'variable') {
+        unless %!d.exists( ~$/ ) {
+            die "Invalid. $/ not declared before use";
+        }
+    }
+
+    multi method find-vars(Match $/, 'literal') {
+        die "This multi variant should never be called";
+    }
+
+    multi method find-vars(Match $/, 'declaration') {
+        my $name = ~$<variable>;
+        if %!d{$name}++ {
+            @!warnings.push: "Useless redeclaration of variable $name";
+        }
+    }
+
+    multi method find-vars(Match $/, 'assignment') {
+        self.find-vars($<lvalue>, 'lvalue');
+        self.find-vars($<expression>, 'expression');
+    }
+
+    multi method find-vars(Match $/, 'binding') {
+        self.find-vars($<lvalue>, 'lvalue');
+        self.find-vars($<expression>, 'expression');
+    }
+
+    multi method find-vars(Match $/, 'saycall') {
+        self.find-vars($<expression>, 'expression');
+    }
+
+    multi method find-vars(Match $/, 'increment') {
+        self.find-vars($<value>, 'value');
+    }
+
+    multi method find-vars($/, $node) {
+        die "Don't know what to do with a $node";
+    }
+
+    method unique-register {
+        return '$' ~ $!c++;
+    }
+
+    multi method sicify(Match $/, 'statement') {
+        if $<expression> -> $e {
+            return self.sicify($e, 'expression');
+        }
+    }
+
+    multi method sicify(Match $/, 'expression') {
+        for <variable literal declaration assignment binding saycall
+             increment> -> $subrule {
+            if $/{$subrule} -> $e {
+                return self.sicify($e, $subrule);
+            }
+        }
+    }
+
+    multi method sicify(Match $/, 'lvalue') {
+        for <variable declaration increment> -> $subrule {
+            if $/{$subrule} -> $e {
+                return self.sicify($e, $subrule);
+            }
+        }
+    }
+
+    multi method sicify(Match $/, 'value') {
+        for <variable literal declaration saycall increment> -> $subrule {
+            if $/{$subrule} -> $e {
+                return self.sicify($e, $subrule);
+            }
+        }
+    }
+
+    multi method sicify(Match $/, 'variable') {
+        my $register = self.unique-register;
+        my $variable = "'$/'";
+        push @!sic, "$register = fetch $variable";
+        return ($register, $variable);
+    }
+
+    multi method sicify(Match $/, 'literal') {
+        my $register = self.unique-register;
+        my $literal = ~$/;
+        push @!sic, "$register = $literal";
+        return ($register, '<constant>');
+    }
+
+    multi method sicify(Match $/, 'declaration') {
+        return self.sicify($<variable>, 'variable');
+    }
+
+    multi method sicify(Match $/, 'assignment') {
+        my ($register, $) = self.sicify($<expression>, 'expression');
+        my ($, $variable) = self.sicify($<lvalue>, 'lvalue');
+        push @!sic, "store $variable, $register";
+        return ($register, $variable);
+    }
+
+    multi method sicify(Match $/, 'binding') {
+        my ($register, $rightvar) = self.sicify($<expression>, 'expression');
+        my ($, $leftvar) = self.sicify($<lvalue>, 'lvalue');
+        if $rightvar ~~ / ^ \d+ $ / { # hm. this is brittle and suboptimal.
+            $rightvar = $register;
+        }
+        push @!sic, "bind $leftvar, $rightvar";
+        return ($register, $leftvar);
+    }
+
+    multi method sicify(Match $/, 'saycall') {
+        my ($register, $) = self.sicify($<expression>, 'expression');
+        my $result = self.unique-register;
+        push @!sic, "say $register";
+        push @!sic, "$result = 1";
+        return ($result, 1);
+    }
+
+    multi method sicify(Match $/, 'increment') {
+        my ($register, $variable) = self.sicify($<value>, 'value');
+        die "Can't increment a constant"
+            if $variable eq '<constant>';
+        push @!sic, "inc $register";
+        push @!sic, "store $variable, $register";
+        return ($register, $variable);
+    }
+
+    multi method sicify(Match $/, $node) {
+        die "Don't know what to do with a $node";
+    }
+
+    sub declutter(@instructions) {
+        my @decluttered;
+        for @instructions.kv -> $i, $line {
+            if $line !~~ / ^ ('$' \d+) ' =' / {
+                push @decluttered, $line;
+            }
+            else {
+                my $varname = ~$0;
+                my Bool $usages-later = False;
+                for $i+1 ..^ @instructions -> $j {
+                    ++$usages-later
+                        if defined index(@instructions[$j], $varname);
+                }
+                if $usages-later {
+                    push @decluttered, $line;
+                }
+            }
+        }
+        return @decluttered;
+    }
+
+    sub renumber(@instructions) {
+        my $number = 0;
+        my %mapping;
+        return @instructions.map: {
+            .subst( :global, / ('$' \d+) /, {
+                my $varname = ~$0;
+                if !%mapping.exists($varname) {
+                    %mapping{$varname} = '$' ~ $number++;
+                }
+                %mapping{$varname}
+            } );
+        };
     }
 }
 
