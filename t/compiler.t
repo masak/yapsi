@@ -24,6 +24,9 @@ my @programs-that-compile =
     'my $a; ++$a',
     '++my $a',
     '++my $a = 42',
+    'my $a; {}; say $a',
+    "my \$a; \{\}\nsay \$a",
+    'my $a; { say $a }',
 ;
 
 for @programs-that-compile -> $program {
