@@ -33,14 +33,10 @@ class Yapsi::Compiler {
         die "Could not parse"
             unless Yapsi::Perl6::Grammar.parse($program);
         %!d = ();
-        for $<statementlist><statement> -> $statement {
-            self.find-vars($statement, 'statement');
-        }
+        self.find-vars($/, 'block');
         $!c = 0;
         @!sic = '`lexicals: <' ~ (join ' ', %!d.keys) ~ '>';
-        for $<statementlist><statement> -> $statement {
-            self.sicify($statement, 'statement');
-        }
+        self.sicify($/, 'block');
         return renumber(declutter(@!sic));
     }
 
@@ -52,7 +48,7 @@ class Yapsi::Compiler {
 
     multi method find-vars(Match $/, 'expression') {
         for <assignment binding variable declaration saycall
-             increment> -> $subrule {
+             increment block> -> $subrule {
             if $/{$subrule} -> $e {
                 self.find-vars($e, $subrule);
             }
@@ -110,6 +106,12 @@ class Yapsi::Compiler {
         self.find-vars($<value>, 'value');
     }
 
+    multi method find-vars(Match $/, 'block') {
+        for $<statementlist><statement> -> $statement {
+            self.find-vars($statement, 'statement');
+        }
+    }
+
     multi method find-vars($/, $node) {
         die "Don't know what to do with a $node";
     }
@@ -126,7 +128,7 @@ class Yapsi::Compiler {
 
     multi method sicify(Match $/, 'expression') {
         for <variable literal declaration assignment binding saycall
-             increment> -> $subrule {
+             increment block> -> $subrule {
             if $/{$subrule} -> $e {
                 return self.sicify($e, $subrule);
             }
@@ -199,6 +201,12 @@ class Yapsi::Compiler {
         push @!sic, "inc $register";
         push @!sic, "store $variable, $register";
         return ($register, $variable);
+    }
+
+    multi method sicify(Match $/, 'block') {
+        for $<statementlist><statement> -> $statement {
+            self.sicify($statement, 'statement');
+        }
     }
 
     multi method sicify(Match $/, $node) {

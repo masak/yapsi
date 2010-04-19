@@ -6,7 +6,7 @@ plan *;
 use Yapsi;
 
 my $out;
-sub clear-out() { $out = '' }
+my $clear = method ($out:) { $out = '' }
 my $io-collector = class { method say($i) {$out ~= $i ~ "\n"} };
 
 my Yapsi::Compiler $compiler .= new;
@@ -22,10 +22,11 @@ my @tests =
     'my $a = 42; my $a; say $a',       "42\n",      'same scope, same var',
     'my $a = 42; say ++$a',            "43\n",      'prefix increment',
     'my $a; say ++$a',                 "1\n",       'increment undefined',
+    'my $a = 42; { say $a }',          "42\n",      'variable in a block',
 ;
 
 for @tests -> $program, $expected, $message {
-    clear-out;
+    $out.$clear;
     $runtime.run( $compiler.compile($program) );
 
     is $out, $expected, $message;
