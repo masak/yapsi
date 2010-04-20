@@ -9,6 +9,7 @@ my Yapsi::Compiler $c .= new;
 my @programs-that-compile =
     '',
     ';',
+    '; ',
     '42',
     '42;',
     'my $a',
