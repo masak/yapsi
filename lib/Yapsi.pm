@@ -204,9 +204,11 @@ class Yapsi::Compiler {
     }
 
     multi method sicify(Match $/, 'block') {
+        my ($register, $variable);
         for $<statementlist><statement> -> $statement {
-            self.sicify($statement, 'statement');
+            ($register, $variable) = self.sicify($statement, 'statement');
         }
+        return ($register, $variable);
     }
 
     multi method sicify(Match $/, $node) {
