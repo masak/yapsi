@@ -1,7 +1,7 @@
 use v6;
 
 grammar Yapsi::Perl6::Grammar {
-    regex TOP { ^ <statement> ** ';' $ }
+    regex TOP { ^ <statement> ** ';' <.ws> $ }
     token statement { <expression> || '' }
     token expression { <assignment> || <binding> || <variable> || <literal>
                        || <declaration> || <saycall> || <increment> }
