@@ -23,6 +23,7 @@ my @tests =
     'my $a = 42; say ++$a',            "43\n",      'prefix increment',
     'my $a; say ++$a',                 "1\n",       'increment undefined',
     'my $a = 42; { say $a }',          "42\n",      'variable in a block',
+    'my $a = 42; { say my $a }',       "Any()\n",   'new variable in a block',
 ;
 
 for @tests -> $program, $expected, $message {
