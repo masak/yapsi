@@ -326,8 +326,13 @@ class Yapsi::Runtime {
         my @containers;
         my $current-block = 'main';
         my $ip = find-block(@sic, $current-block) + 1;
+        my @stack;
         loop {
-            return if $ip >= @sic || @sic[$ip] eq '';
+            if $ip >= @sic || @sic[$ip] eq '' {
+                return unless @stack;
+                $ip = pop @stack;
+                redo;
+            }
             given @sic[$ip++].substr(4) {
                 when /^ '`lexicals: <' ('' || \S+ ** \s) '>' $ / {
                     %pads{$current-block} = {};
@@ -382,6 +387,7 @@ class Yapsi::Runtime {
                     @r[+$0] = ~$1;
                 }
                 when /^ 'call $'(\d+) $/ {
+                    push @stack, $ip;
                     $ip = find-block(@sic, @r[+$0]) + 1;
                     $current-block = @r[+$0];
                 }

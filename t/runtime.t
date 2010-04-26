@@ -24,6 +24,7 @@ my @tests =
     'my $a; say ++$a',                 "1\n",       'increment undefined',
     'my $a = 42; { say $a }',          "42\n",      'variable in a block',
     'my $a = 42; { say my $a }',       "Any()\n",   'new variable in a block',
+    'my $a; { $a = 42 }; say $a',      "42\n",      'value survives block',
 ;
 
 for @tests -> $program, $expected, $message {
