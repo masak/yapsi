@@ -19,6 +19,7 @@ try {
     my Yapsi::Runtime $runtime .= new;
 
     my @sic = $compiler.compile($program);
+    warn $_ for $compiler.warnings;
     $runtime.run(@sic);
 }
 say $! if $!;
