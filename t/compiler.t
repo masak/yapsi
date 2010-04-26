@@ -49,6 +49,7 @@ my @programs-that-don't-compile =   # '
     'say $a',
     'say $a; my $a',
     '++42',
+    '{ my $a }; say $a',
 ;
 
 for @programs-that-don't-compile -> $program { # '
