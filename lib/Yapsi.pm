@@ -57,7 +57,8 @@ class Yapsi::Compiler {
     }
 
     multi method find-vars(Match $/, 'statement') {
-        if $<expression><block> -> $e {
+        # RAKUDO: Autovivification
+        if $<expression> && $<expression><block> -> $e {
             my $remember-block = $!current-block;
             self.find-vars($e, 'block');
             $!current-block = $remember-block;
@@ -161,7 +162,8 @@ class Yapsi::Compiler {
     }
 
     multi method sicify(Match $/, 'statement') {
-        if $<expression><block> -> $e {
+        # RAKUDO: Autovivification
+        if $<expression> && $<expression><block> -> $e {
             my $remember-block = $!current-block;
             my $block = self.sicify($e, 'block');
             my $register = self.unique-register;
