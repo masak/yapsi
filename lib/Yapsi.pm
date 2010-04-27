@@ -263,7 +263,7 @@ class Yapsi::Compiler {
         }
         else {
             $!current-block = 'main';
-            $!block-counter = 1; 
+            $!block-counter = 1;
         }
         @!block-order.push($!current-block);
         %!blocks{$!current-block}
