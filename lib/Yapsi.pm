@@ -28,6 +28,7 @@ class Yapsi::Compiler {
 
     has %!pads;  # maps lexical blocks to the variables they declare
     has $!c;     # unique register counter; increases with each new register
+    has $!block-counter; # a unique block counter
 
     has @!block-order;
     has %!blocks;
@@ -138,10 +139,12 @@ class Yapsi::Compiler {
 
     multi method find-vars(Match $/, 'block') {
         if defined $!current-block {
-            $!current-block ~= '_1'; # XXX wrong for same-level blocks
+            $!current-block ~= '_' ~ $!block-counter;
+            $!block-counter++;
         }
         else {
             $!current-block = 'main';
+            $!block-counter = 1;
         }
         %!pads{$!current-block} = {};
         for $<statementlist><statement> -> $statement {
@@ -255,10 +258,12 @@ class Yapsi::Compiler {
 
     multi method sicify(Match $/, 'block') {
         if defined $!current-block {
-            $!current-block ~= '_1'; # XXX wrong for same-level blocks
+            $!current-block ~= '_' ~ $!block-counter;
+            $!block-counter++;
         }
         else {
             $!current-block = 'main';
+            $!block-counter = 1; 
         }
         @!block-order.push($!current-block);
         %!blocks{$!current-block}
