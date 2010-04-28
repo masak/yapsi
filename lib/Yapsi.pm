@@ -28,11 +28,11 @@ class Yapsi::Compiler {
 
     has %!pads;  # maps lexical blocks to the variables they declare
     has $!c;     # unique register counter; increases with each new register
-    has $!block-counter; # a unique block counter
 
     has @!block-order;
     has %!blocks;
     has $!current-block;
+    has @!block-counters; # keeps track of nested block numbers
 
     method compile($program) {
         @!warnings = ();
@@ -139,17 +139,18 @@ class Yapsi::Compiler {
 
     multi method find-vars(Match $/, 'block') {
         if defined $!current-block {
-            $!current-block ~= '_' ~ $!block-counter;
-            $!block-counter++;
+            $!current-block ~= '_' ~ @!block-counters[*-1]++;
+            push @!block-counters, 1;
         }
         else {
             $!current-block = 'main';
-            $!block-counter = 1;
+            @!block-counters = 1;
         }
         %!pads{$!current-block} = {};
         for $<statementlist><statement> -> $statement {
             self.find-vars($statement, 'statement');
         }
+        pop @!block-counters;
     }
 
     multi method find-vars($/, $node) {
@@ -258,12 +259,12 @@ class Yapsi::Compiler {
 
     multi method sicify(Match $/, 'block') {
         if defined $!current-block {
-            $!current-block ~= '_' ~ $!block-counter;
-            $!block-counter++;
+            $!current-block ~= '_' ~ @!block-counters[*-1]++;
+            push @!block-counters, 1;
         }
         else {
             $!current-block = 'main';
-            $!block-counter = 1;
+            @!block-counters = 1;
         }
         @!block-order.push($!current-block);
         %!blocks{$!current-block}
@@ -271,6 +272,7 @@ class Yapsi::Compiler {
         for $<statementlist><statement> -> $statement {
             self.sicify($statement, 'statement');
         }
+        pop @!block-counters;
         return $!current-block;
     }
 
