@@ -23,28 +23,45 @@ grammar Yapsi::Perl6::Grammar {
     token block { <.ws> '{' <.ws> <statementlist> <.ws> '}' }
 }
 
+class Yapsi::Environment {
+    has %.pads;
+    has @.containers;
+}
+
 class Yapsi::Compiler {
     has @.warnings;
 
-    method compile($program) {
+    method compile($program, Yapsi::Environment :$env) {
         @!warnings = ();
         die "Could not parse"
             unless Yapsi::Perl6::Grammar.parse($program);
-        my %*pads;  # maps lexical blocks to the variables they declare
+        my Yapsi::Environment $*env
+            = $env ~~ Yapsi::Environment
+                && defined $env
+                ?? $env !! Yapsi::Environment.new;
         my $*current-block = '';
         my @*block-counters; # keeps track of nested block numbers
         self.find-vars($/, 'block');
+        my @sic = "This is SIC v$VERSION", '', 'environment:';
+        my $INDENT = '    ';
+        for $*env.pads.keys.sort -> $pad {
+            push @sic, $INDENT ~ $pad ~ ':';
+            for $*env.pads{$pad}.keys -> $var {
+                push @sic, $INDENT x 2 ~ $var ~ ': '
+                           ~ $*env.pads{$pad}{$var}.perl;
+            }
+        }
+        push @sic, $INDENT ~ 'containers: ' ~ $*env.containers.perl;
         my $*c = 0; # unique register counter; increases with each new register
         my @*block-order;
         my %*blocks;
         $*current-block = '';
         self.sicify($/, 'block');
-        my @sic = "This is SIC v$VERSION";
         for @*block-order -> $block {
             push @sic, '';
             push @sic, "block '$block':";
             for renumber(declutter(%*blocks{$block})) {
-                push @sic, '    ' ~ $_;
+                push @sic, $INDENT ~ $_;
             }
         }
         return @sic;
@@ -94,7 +111,7 @@ class Yapsi::Compiler {
     multi method find-vars(Match $name, 'variable') {
         my $block = $*current-block;
         loop {
-            return if %*pads{$block}.exists( ~$name );
+            return if $*env.pads{$block}.exists( ~$name );
             last unless $block ~~ / _\d+ $/;
             $block.=substr(0, $block.chars - $/.chars);
         }
@@ -107,8 +124,13 @@ class Yapsi::Compiler {
 
     multi method find-vars(Match $/, 'declaration') {
         my $name = ~$<variable>;
-        if %*pads{$*current-block}{$name}++ {
+        if $*env.pads{$*current-block}{$name} {
             @!warnings.push: "Useless redeclaration of variable $name";
+        }
+        else {
+            $*env.pads{$*current-block}{$name}
+                = { :type<container>, :n(+$*env.containers) };
+            push $*env.containers, 'Any()';
         }
     }
 
@@ -139,7 +161,7 @@ class Yapsi::Compiler {
             $*current-block = 'main';
             @*block-counters = 1;
         }
-        %*pads{$*current-block} = {};
+        $*env.pads{$*current-block} //= {};
         for $<statementlist><statement> -> $statement {
             self.find-vars($statement, 'statement');
         }
@@ -260,8 +282,7 @@ class Yapsi::Compiler {
             @*block-counters = 1;
         }
         @*block-order.push($*current-block);
-        %*blocks{$*current-block}
-            = ['`lexicals: <' ~ (join ' ', %*pads{$*current-block}.keys) ~ '>'];
+        %*blocks{$*current-block} = [];
         for $<statementlist><statement> -> $statement {
             self.sicify($statement, 'statement');
         }
@@ -313,6 +334,7 @@ subset Yapsi::IO where { .can('say') }
 
 class Yapsi::Runtime {
     has Yapsi::IO $!io = $*OUT;
+    has Yapsi::Environment $.env;
 
     method run(@sic) {
         if @sic[0] !~~ /^ 'This is SIC v'(\d\d\d\d\.\d\d) $/ {
@@ -321,9 +343,27 @@ class Yapsi::Runtime {
         elsif ~$0 ne $VERSION {
             die "SIC is $0 but this is $VERSION -- cannot run";
         }
+        {
+            $!env = Yapsi::Environment.new;
+            my $line = 3;
+            my $block;
+            while @sic[$line++] -> $decl {
+                if $decl ~~ /^ '    containers: ' (.+) $/ {
+                    $!env.containers.push($_) for eval(~$0).list;
+                }
+                elsif $decl ~~ /^ '        ' (<-[:]>+) ': ' (.+) $/ {
+                    $!env.pads{$block}{~$0} = eval(~$1);
+                }
+                elsif $decl ~~ /^ '    ' (<-[:]>+) ':' $/ {
+                    $block = ~$0;
+                    $!env.pads{$block} //= {};
+                }
+                else {
+                    die "Unknown environment declaration `$decl`";
+                }
+            }
+        }
         my @r;
-        my %pads;
-        my @containers;
         my $current-block = 'main';
         my $ip = find-block(@sic, $current-block) + 1;
         my @stack;
@@ -331,45 +371,38 @@ class Yapsi::Runtime {
             if $ip >= @sic || @sic[$ip] eq '' {
                 return unless @stack;
                 $ip = pop @stack;
+                $current-block .= substr(0, -2);
                 redo;
             }
             given @sic[$ip++].substr(4) {
-                when /^ '`lexicals: <' ('' || \S+ ** \s) '>' $ / {
-                    %pads{$current-block} = {};
-                    for $0.comb(/\S+/) -> $var {
-                        %pads{$current-block}{$var}
-                            = { :type<container>, :n(+@containers) };
-                        push @containers, 'Any()';
-                    }
-                }
                 when /^ '$'(\d+) ' = ' (\d+) $/ {
                     @r[+$0] = +$1
                 }
                 when /^ 'store ' \'(<-[']>+)\' ', $'(\d+) $/ {
-                    my $thing = locate-variable(%pads, $current-block, ~$0);
+                    my $thing = locate-variable($!env.pads, $current-block, ~$0);
                     if $thing<type> eq 'container' {
                         my $n = $thing<n>;
-                        @containers[$n] = @r[+$1];
+                        $!env.containers[$n] = @r[+$1];
                     }
                     else {
                         die "Cannot store something in readonly symbol ~$0";
                     }
                 }
                 when /^ '$'(\d+) ' = fetch '\'(<-[']>+)\' $/ {
-                    my $thing = locate-variable(%pads, $current-block, ~$1);
+                    my $thing = locate-variable($!env.pads, $current-block, ~$1);
                     if $thing<type> eq 'container' {
                         my $n = $thing<n>;
-                        @r[+$0] = @containers[$n];
+                        @r[+$0] = $!env.containers[$n];
                     }
                     else { # immadiate
                         @r[+$0] = $thing<value>;
                     }
                 }
                 when /^ 'bind ' \'(<-[']>+)\' ', ' \'(<-[']>+)\' $/ {
-                    %pads{$current-block}{~$0} = %pads{$current-block}{~$1};
+                    $!env.pads{$current-block}{~$0} = $!env.pads{$current-block}{~$1};
                 }
                 when /^ 'bind ' \'(<-[']>+)\' ', $'(\d+) $/ {
-                    %pads{$current-block}{~$0}
+                    $!env.pads{$current-block}{~$0}
                         = { :type<immediate>, :value(+$1) };
                 }
                 when /^ 'say $'(\d+) $/ {
