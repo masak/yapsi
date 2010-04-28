@@ -26,31 +26,24 @@ grammar Yapsi::Perl6::Grammar {
 class Yapsi::Compiler {
     has @.warnings;
 
-    has %!pads;  # maps lexical blocks to the variables they declare
-    has $!c;     # unique register counter; increases with each new register
-
-    has @!block-order;
-    has %!blocks;
-    has $!current-block;
-    has @!block-counters; # keeps track of nested block numbers
-
     method compile($program) {
         @!warnings = ();
         die "Could not parse"
             unless Yapsi::Perl6::Grammar.parse($program);
-        %!pads = ();
-        $!current-block = Mu;
+        my %*pads;  # maps lexical blocks to the variables they declare
+        my $*current-block = '';
+        my @*block-counters; # keeps track of nested block numbers
         self.find-vars($/, 'block');
-        $!c = 0;
-        @!block-order = ();
-        %!blocks = ();
-        $!current-block = Mu;
+        my $*c = 0; # unique register counter; increases with each new register
+        my @*block-order;
+        my %*blocks;
+        $*current-block = '';
         self.sicify($/, 'block');
         my @sic = "This is SIC v$VERSION";
-        for @!block-order -> $block {
+        for @*block-order -> $block {
             push @sic, '';
             push @sic, "block '$block':";
-            for renumber(declutter(%!blocks{$block})) {
+            for renumber(declutter(%*blocks{$block})) {
                 push @sic, '    ' ~ $_;
             }
         }
@@ -60,9 +53,9 @@ class Yapsi::Compiler {
     multi method find-vars(Match $/, 'statement') {
         # RAKUDO: Autovivification
         if $<expression> && $<expression><block> -> $e {
-            my $remember-block = $!current-block;
+            my $remember-block = $*current-block;
             self.find-vars($e, 'block');
-            $!current-block = $remember-block;
+            $*current-block = $remember-block;
         }
         elsif $<expression> -> $e {
             self.find-vars($e, 'expression');
@@ -99,9 +92,9 @@ class Yapsi::Compiler {
     }
 
     multi method find-vars(Match $name, 'variable') {
-        my $block = $!current-block;
+        my $block = $*current-block;
         loop {
-            return if %!pads{$block}.exists( ~$name );
+            return if %*pads{$block}.exists( ~$name );
             last unless $block ~~ / _\d+ $/;
             $block.=substr(0, $block.chars - $/.chars);
         }
@@ -114,7 +107,7 @@ class Yapsi::Compiler {
 
     multi method find-vars(Match $/, 'declaration') {
         my $name = ~$<variable>;
-        if %!pads{$!current-block}{$name}++ {
+        if %*pads{$*current-block}{$name}++ {
             @!warnings.push: "Useless redeclaration of variable $name";
         }
     }
@@ -138,19 +131,19 @@ class Yapsi::Compiler {
     }
 
     multi method find-vars(Match $/, 'block') {
-        if defined $!current-block {
-            $!current-block ~= '_' ~ @!block-counters[*-1]++;
-            push @!block-counters, 1;
+        if $*current-block {
+            $*current-block ~= '_' ~ @*block-counters[*-1]++;
+            push @*block-counters, 1;
         }
         else {
-            $!current-block = 'main';
-            @!block-counters = 1;
+            $*current-block = 'main';
+            @*block-counters = 1;
         }
-        %!pads{$!current-block} = {};
+        %*pads{$*current-block} = {};
         for $<statementlist><statement> -> $statement {
             self.find-vars($statement, 'statement');
         }
-        pop @!block-counters;
+        pop @*block-counters;
     }
 
     multi method find-vars($/, $node) {
@@ -158,20 +151,20 @@ class Yapsi::Compiler {
     }
 
     method unique-register {
-        return '$' ~ $!c++;
+        return '$' ~ $*c++;
     }
 
     method add-code($line) {
-        %!blocks{$!current-block}.push($line);
+        %*blocks{$*current-block}.push($line);
     }
 
     multi method sicify(Match $/, 'statement') {
         # RAKUDO: Autovivification
         if $<expression> && $<expression><block> -> $e {
-            my $remember-block = $!current-block;
+            my $remember-block = $*current-block;
             my $block = self.sicify($e, 'block');
             my $register = self.unique-register;
-            $!current-block = $remember-block;
+            $*current-block = $remember-block;
             self.add-code: "$register = fetch-block '$block'";
             self.add-code: "call $register";
         }
@@ -258,22 +251,22 @@ class Yapsi::Compiler {
     }
 
     multi method sicify(Match $/, 'block') {
-        if defined $!current-block {
-            $!current-block ~= '_' ~ @!block-counters[*-1]++;
-            push @!block-counters, 1;
+        if $*current-block {
+            $*current-block ~= '_' ~ @*block-counters[*-1]++;
+            push @*block-counters, 1;
         }
         else {
-            $!current-block = 'main';
-            @!block-counters = 1;
+            $*current-block = 'main';
+            @*block-counters = 1;
         }
-        @!block-order.push($!current-block);
-        %!blocks{$!current-block}
-            = ['`lexicals: <' ~ (join ' ', %!pads{$!current-block}.keys) ~ '>'];
+        @*block-order.push($*current-block);
+        %*blocks{$*current-block}
+            = ['`lexicals: <' ~ (join ' ', %*pads{$*current-block}.keys) ~ '>'];
         for $<statementlist><statement> -> $statement {
             self.sicify($statement, 'statement');
         }
-        pop @!block-counters;
-        return $!current-block;
+        pop @*block-counters;
+        return $*current-block;
     }
 
     multi method sicify(Match $/, $node) {
