@@ -25,6 +25,7 @@ my @tests =
     'my $a = 42; { say $a }',          "42\n",      'variable in a block',
     'my $a = 42; { say my $a }',       "Any()\n",   'new variable in a block',
     'my $a; { $a = 42 }; say $a',      "42\n",      'value survives block',
+    'my $a = 42; {my $a = 7}; say $a', "42\n",      'initialised value survives block',
     '{}; my $a = 42; { say $a }',      "42\n",      'same-level blocks',
 ;
 
