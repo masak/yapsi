@@ -9,7 +9,7 @@ my $target = 'run';
 if @*ARGS && @*ARGS[0] ~~ /'--target='(\w+)/ {
     die "Recognized targets: {@TARGETS}"
         unless $0.lc eq any @TARGETS;
-    $target = ~$0;
+    $target = $0.lc;
     shift @*ARGS;
 }
 
