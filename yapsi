@@ -4,7 +4,7 @@ use v6;
 use Yapsi;
 
 class IO is also {
-    method readline($prompt = '> ') {
+    method readline($prompt = '>> ') {
         $!PIO.readline_interactive($prompt) // Mu;
     }
 }
