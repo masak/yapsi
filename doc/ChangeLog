@@ -1,3 +1,10 @@
+New in 2010.05 release
++ immediate blocks (big new feature of this release)
++ parameterized output (and compile warnings) for debugging
++ prefix increment
++ added a --target=sic to the yapsi script
++ internal refactorings to allow for hooking in TARDIS
+
 New in 2010.04 release
 + 'my' declarations
 + assignment
