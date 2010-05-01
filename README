@@ -8,14 +8,14 @@ Right now you can do things like this:
 $ ./yapsi -e 'say 42'
 42
 
-$ ./yapsi -e 'my $a = 5; say $a'
+$ ./yapsi -e 'my $a; { $a = 5 }; say $a'
 5
 
-$ ./yapsi -e 'my $a = 5; my $b := $a; $b = 42; say $a'
+$ ./yapsi -e 'my $a = 5; my $b := $a; $b = 41; ++$b; say $a'
 42
 
-In other words, Yapsi currently handles declaration, assignment, binding,
-and a very basic 'say' instruction.
+In other words, Yapsi currently handles declaration, immediate blocks,
+assignment, binding, prefix increment, and a very basic 'say' instruction.
 
 The compiler also detects use-before-declaration and syntax errors.
 
@@ -29,10 +29,10 @@ Could not parse
 
 Things we hope to implement in the immediate future:
 
-* Blocks
 * If statements
 * Loops
 * Function calls
+* BEGIN, CHECK, INIT and END phasers
 
 == Raison d'être
 
