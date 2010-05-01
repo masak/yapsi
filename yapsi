@@ -3,6 +3,12 @@ use v6;
 
 use Yapsi;
 
+class IO is also {
+    method readline($prompt = '> ') {
+        $!PIO.readline_interactive($prompt) // Mu;
+    }
+}
+
 my @TARGETS = <run sic>;
 
 my $target = 'run';
@@ -11,6 +17,33 @@ if @*ARGS && @*ARGS[0] ~~ /'--target='(\w+)/ {
         unless $0.lc eq any @TARGETS;
     $target = ~$0;
     shift @*ARGS;
+}
+
+if ! @*ARGS {
+    my Yapsi::Compiler $compiler .= new;
+    my Yapsi::Environment $env;
+
+    loop {
+        my $program = $*IN.readline;
+        if !defined $program {
+            say '';
+            exit;
+        }
+        try {
+            my @sic = $compiler.compile($program, :$env);
+            warn $_ for $compiler.warnings;
+
+            if $target eq 'sic' {
+                .say for @sic;
+            }
+            else {
+                my Yapsi::Runtime $runtime .= new;
+                $runtime.run(@sic);
+                $env = $runtime.env;
+            }
+        }
+        say $! if $!;
+    }
 }
 
 my $program;
