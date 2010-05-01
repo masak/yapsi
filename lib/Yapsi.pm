@@ -336,6 +336,8 @@ class Yapsi::Runtime {
     has Yapsi::IO $!io = $*OUT;
     has Yapsi::Environment $.env;
 
+    has $!current-block;
+
     method run(@sic) {
         if @sic[0] !~~ /^ 'This is SIC v'(\d\d\d\d\.\d\d) $/ {
             die "Incompatible SIC version line";
@@ -364,14 +366,15 @@ class Yapsi::Runtime {
             }
         }
         my @r;
-        my $current-block = 'main';
-        my $ip = find-block(@sic, $current-block) + 1;
+        $!current-block = 'main';
+        my $ip = find-block(@sic, $!current-block) + 1;
         my @stack;
+        self.*tick;
         loop {
             if $ip >= @sic || @sic[$ip] eq '' {
                 return unless @stack;
                 $ip = pop @stack;
-                $current-block .= substr(0, -2);
+                $!current-block .= substr(0, -2);
                 redo;
             }
             given @sic[$ip++].substr(4) {
@@ -379,7 +382,7 @@ class Yapsi::Runtime {
                     @r[+$0] = +$1
                 }
                 when /^ 'store ' \'(<-[']>+)\' ', $'(\d+) $/ {
-                    my $thing = locate-variable($!env.pads, $current-block, ~$0);
+                    my $thing = locate-variable($!env.pads, $!current-block, ~$0);
                     if $thing<type> eq 'container' {
                         my $n = $thing<n>;
                         $!env.containers[$n] = @r[+$1];
@@ -387,26 +390,22 @@ class Yapsi::Runtime {
                     else {
                         die "Cannot store something in readonly symbol ~$0";
                     }
+                    self.*tick;
                 }
                 when /^ '$'(\d+) ' = fetch '\'(<-[']>+)\' $/ {
-                    my $thing = locate-variable($!env.pads, $current-block, ~$1);
-                    if $thing<type> eq 'container' {
-                        my $n = $thing<n>;
-                        @r[+$0] = $!env.containers[$n];
-                    }
-                    else { # immadiate
-                        @r[+$0] = $thing<value>;
-                    }
+                    @r[+$0] = self.get-value-of(~$1);
                 }
                 when /^ 'bind ' \'(<-[']>+)\' ', ' \'(<-[']>+)\' $/ {
-                    $!env.pads{$current-block}{~$0} = $!env.pads{$current-block}{~$1};
+                    $!env.pads{$!current-block}{~$0} = $!env.pads{$!current-block}{~$1};
+                    self.*tick;
                 }
                 when /^ 'bind ' \'(<-[']>+)\' ', $'(\d+) $/ {
-                    $!env.pads{$current-block}{~$0}
+                    $!env.pads{$!current-block}{~$0}
                         = { :type<immediate>, :value(+$1) };
                 }
                 when /^ 'say $'(\d+) $/ {
                     $!io.say: @r[+$0];
+                    self.*tick;
                 }
                 when /^ 'inc $'(\d+) $/ {
                     if @r[+$0] eq 'Any()' {
@@ -422,7 +421,7 @@ class Yapsi::Runtime {
                 when /^ 'call $'(\d+) $/ {
                     push @stack, $ip;
                     $ip = find-block(@sic, @r[+$0]) + 1;
-                    $current-block = @r[+$0];
+                    $!current-block = @r[+$0];
                 }
                 default { die "Couldn't handle instruction `$_`" }
             }
@@ -446,5 +445,12 @@ class Yapsi::Runtime {
             $block.=substr(0, $block.chars - $/.chars);
         }
         die "Runtime panic -- could not find variable $name";
+    }
+
+    method get-value-of($variable) {
+        my $thing = locate-variable($!env.pads, $!current-block, $variable);
+        return $thing<type> eq 'container'
+            ?? $!env.containers[$thing<n>]
+            !! $thing<value>;
     }
 }
