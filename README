@@ -45,7 +45,6 @@ Could not parse
 
 Things we hope to implement in the immediate future:
 
-* If statements
 * Loops
 * Function calls
 * BEGIN, CHECK, INIT and END phasers

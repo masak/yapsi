@@ -27,7 +27,12 @@ my @programs-that-compile =
     'my $a; {}; say $a',
     "my \$a; \{\}\nsay \$a",
     'my $a; { say $a }',
+    'if 1 { say 42 }',
+    'my $a; if $a {}',
+    'if my $a {} else { say 42 }',
 ;
+
+sub escape($string) { $string.subst("\n", "\\n", :g) }
 
 for @programs-that-compile -> $program {
     my $can-compile = False;
@@ -35,7 +40,7 @@ for @programs-that-compile -> $program {
         $c.compile($program);
         $can-compile = True;
     }
-    ok $can-compile, "will compile '$program'";
+    ok $can-compile, "will compile '{escape($program)}'";
 }
 
 my @programs-that-don't-compile =   # '
@@ -50,6 +55,11 @@ my @programs-that-don't-compile =   # '
     'say $a; my $a',
     '++42',
     '{ my $a }; say $a',
+    'else { 42 }',
+    'if 42 say 42',
+    'if $a {}',
+    'if 42 { $a }',
+    'if 5 {} else { $a }',
 ;
 
 for @programs-that-don't-compile -> $program { # '

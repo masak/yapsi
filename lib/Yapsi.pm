@@ -5,11 +5,14 @@ my $VERSION = '2010.07';
 grammar Yapsi::Perl6::Grammar {
     regex TOP { ^ <statementlist> <.ws> $ }
     regex statementlist { <statement> ** <eat_terminator> }
-    token statement { <expression> || '' }
+    token statement { <statement_control> || <expression> || '' }
     token eat_terminator { <?after '}'> \n || <.ws> ';' }
     token expression { <assignment> || <binding> || <variable> || <literal>
                        || <declaration> || <saycall> || <increment>
                        || <block> }
+    token statement_control { <statement_control_if> }
+    rule  statement_control_if { 'if' <expression> <block>
+                                 [ 'else' <else=block> ]? }
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
                   || <increment> }
@@ -52,7 +55,8 @@ class Yapsi::Compiler {
             }
         }
         push @sic, $INDENT ~ 'containers: ' ~ $*env.containers.perl;
-        my $*c = 0; # unique register counter; increases with each new register
+        my $*c = 0; # unique register counter
+        my $*l = 0; # unique label    counter
         my @*block-order;
         my %*blocks;
         $*current-block = '';
@@ -77,6 +81,11 @@ class Yapsi::Compiler {
         elsif $<expression> -> $e {
             self.find-vars($e, 'expression');
         }
+        # RAKUDO: Autovivification
+        elsif $<statement_control>
+              && $<statement_control><statement_control_if> -> $e {
+            self.find-vars($e, 'statement_control_if');
+        }
     }
 
     multi method find-vars(Match $/, 'expression') {
@@ -89,6 +98,18 @@ class Yapsi::Compiler {
             if $/{$subrule} -> $e {
                 self.find-vars($e, $subrule);
             }
+        }
+    }
+
+    multi method find-vars(Match $/, 'statement_control_if') {
+        self.find-vars($<expression>, 'expression');
+        my $remember-block = $*current-block;
+        self.find-vars($<block>, 'block');
+        $*current-block = $remember-block;
+        # RAKUDO: Autovivification
+        if $<else> && $<else>[0] -> $e {
+            self.find-vars($e, 'block');
+            $*current-block = $remember-block;
         }
     }
 
@@ -176,6 +197,10 @@ class Yapsi::Compiler {
         return '$' ~ $*c++;
     }
 
+    method unique-label {
+        return 'L' ~ $*l++;
+    }
+
     method add-code($line) {
         %*blocks{$*current-block}.push($line);
     }
@@ -185,13 +210,43 @@ class Yapsi::Compiler {
         if $<expression> && $<expression><block> -> $e {
             my $remember-block = $*current-block;
             my $block = self.sicify($e, 'block');
-            my $register = self.unique-register;
             $*current-block = $remember-block;
+            my $register = self.unique-register;
             self.add-code: "$register = fetch-block '$block'";
             self.add-code: "call $register";
         }
         elsif $<expression> -> $e {
             return self.sicify($e, 'expression');
+        }
+        elsif $<statement_control>
+              && $<statement_control><statement_control_if> -> $e {
+            return self.sicify($e, 'statement_control_if');
+        }
+    }
+
+    multi method sicify(Match $/, 'statement_control_if') {
+        my ($register, $) = self.sicify($<expression>, 'expression');
+        my $remember-block = $*current-block;
+        my $block = self.sicify($<block>, 'block');
+        $*current-block = $remember-block;
+        my $after-if = self.unique-label;
+        self.add-code: "jf $register, $after-if";
+        $register = self.unique-register;
+        self.add-code: "$register = fetch-block '$block'";
+        self.add-code: "call $register";
+        my $after-else;
+        if $<else> {
+            $after-else = self.unique-label;
+            self.add-code: "jmp $after-else";
+        }
+        self.add-code: "`label $after-if";
+        if $<else> {
+            $block = self.sicify($<else>[0], 'block');
+            $*current-block = $remember-block;
+            $register = self.unique-register;
+            self.add-code: "$register = fetch-block '$block'";
+            self.add-code: "call $register";
+            self.add-code: "`label $after-else";
         }
     }
 
@@ -423,6 +478,18 @@ class Yapsi::Runtime {
                     $ip = find-block(@sic, @r[+$0]) + 1;
                     $!current-block = @r[+$0];
                 }
+                when /^ 'jmp '(.*) $/ {
+                        $ip = find-label(@sic, ~$0);
+                }
+                when /^ 'jf $'(\d+)', '(.*) $/ {
+                    if @r[+$0] == 0 {
+                        $ip = find-label(@sic, ~$1);
+                        # XXX: This could result in $!current-block no longer
+                        #      being current, if the jump was to another block
+                    }
+                }
+                when /^ '`' / {
+                }
                 default { die "Couldn't handle instruction `$_`" }
             }
         }
@@ -435,6 +502,15 @@ class Yapsi::Runtime {
             }
         }
         die "Could not find block '$block-sought'";
+    }
+
+    sub find-label(@sic, Str $label-sought) {
+        for ^@sic {
+            if @sic[$_] ~~ /^ \s+ '`label ' (.*)/ && ~$0 eq $label-sought {
+                return $_;
+            }
+        }
+        die "Could not find label '$label-sought'";
     }
 
     sub locate-variable(%pads, $block is copy, Str $name) {

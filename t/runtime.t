@@ -27,6 +27,10 @@ my @tests =
     'my $a; { $a = 42 }; say $a',      "42\n",      'value survives block',
     'my $a = 42; {my $a = 7}; say $a', "42\n",      'initialised value survives block',
     '{}; my $a = 42; { say $a }',      "42\n",      'same-level blocks',
+    'if 42 { say 5 }',                 "5\n",       'executing if block',
+    'if 0 { say 5 }',                  "",          'non-executing if block',
+    'if 0 {} else { say 42 }',         "42\n",      'executing else block',
+    'if 5 {} else { say 42 }',         "",          'non-executing else block',
 ;
 
 for @tests -> $program, $expected, $message {
