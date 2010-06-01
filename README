@@ -2,6 +2,8 @@
 
 This is an implementation of a Perl 6 compiler-and-runtime in Perl 6. It
 currently runs off the old, pre-refactor branch of Rakudo known as 'alpha'.
+You need to have an old version of Rakudo installed (say, the 2010-01
+release), and available in your path under the name 'alpha'.
 
 Right now you can do things like this:
 
