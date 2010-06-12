@@ -5,6 +5,20 @@ currently runs off the old, pre-refactor branch of Rakudo known as 'alpha'.
 You need to have an old version of Rakudo installed (say, the 2010-01
 release), and available in your path under the name 'alpha'.
 
+== Building Yapsi
+
+This assumes that you have a working installation of alpha somewhere in
+your $PATH. Yapsi currently works on top of alpha, an older branch of rakudo.
+If you have not built alpha yet, please build it by doing a git clone from 
+<git://github.com/rakudo/rakudo.git> and "git checkout origin/alpha".
+
+To build Yapsi:
+    * type make in the directory where you've cloned Yapsi.
+    * copy the generated lib/Yapsi.pir to $PERL6LIB or ~/.perl6/lib folder. 
+
+
+== Features currently available in Yapsi
+
 Right now you can do things like this:
 
 $ ./yapsi -e 'say 42'

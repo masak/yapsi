@@ -1,4 +1,4 @@
-#!/usr/bin/alpha
+#!/usr/bin/env alpha
 use v6;
 
 use Yapsi;
