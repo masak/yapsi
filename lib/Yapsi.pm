@@ -1,6 +1,6 @@
 use v6;
 
-my $VERSION = '2010.07';
+my $VERSION = '2010.08';
 
 grammar Yapsi::Perl6::Grammar {
     regex TOP { ^ <statementlist> <.ws> $ }
