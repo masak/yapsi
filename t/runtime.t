@@ -31,6 +31,12 @@ my @tests =
     'if 0 { say 5 }',                  "",          'non-executing if block',
     'if 0 {} else { say 42 }',         "42\n",      'executing else block',
     'if 5 {} else { say 42 }',         "",          'non-executing else block',
+    'my $a = 4; while --$a { say $a }',
+                                       "3\n2\n1\n", 'while loop',
+    'my $a; while $a { say 42 }',      "",          'non-executing while loop',
+#   TODO -- Need to "instantiate" lexpads from some kind of "proto-lexpads"
+#    'my $a = 3; while --$a { say my $b; $b = 42 }', "Any()\nAny()\n",
+#                'each time a block is entered, it gets a fresh lexical pad',
 ;
 
 for @tests -> $program, $expected, $message {

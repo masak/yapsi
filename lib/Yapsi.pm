@@ -8,11 +8,13 @@ grammar Yapsi::Perl6::Grammar {
     token statement { <statement_control> || <expression> || '' }
     token eat_terminator { <?after '}'> \n || <.ws> ';' }
     token expression { <assignment> || <binding> || <variable> || <literal>
-                       || <declaration> || <saycall> || <increment>
-                       || <block> }
-    token statement_control { <statement_control_if> }
+                       || <declaration> || <block>
+                       || <saycall> || <increment> || <decrement> }
+    token statement_control { <statement_control_if>
+                              || <statement_control_while> }
     rule  statement_control_if { 'if' <expression> <block>
                                  [ 'else' <else=block> ]? }
+    rule  statement_control_while { 'while' <expression> <block> }
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
                   || <increment> }
@@ -23,6 +25,7 @@ grammar Yapsi::Perl6::Grammar {
     rule  binding { <lvalue> ':=' <expression> }
     rule  saycall { 'say' <expression> }  # very temporary solution
     rule  increment { '++' <value> }
+    rule  decrement { '--' <value> }
     token block { <.ws> '{' <.ws> <statementlist> <.ws> '}' }
 }
 
@@ -86,6 +89,11 @@ class Yapsi::Compiler {
               && $<statement_control><statement_control_if> -> $e {
             self.find-vars($e, 'statement_control_if');
         }
+        # RAKUDO: Autovivification
+        elsif $<statement_control>
+              && $<statement_control><statement_control_while> -> $e {
+            self.find-vars($e, 'statement_control_while');
+        }
     }
 
     multi method find-vars(Match $/, 'expression') {
@@ -94,7 +102,7 @@ class Yapsi::Compiler {
             die "Can not handle non-immediate blocks yet. Sorry. :/";
         }
         for <assignment binding variable declaration saycall
-             increment> -> $subrule {
+             increment decrement> -> $subrule {
             if $/{$subrule} -> $e {
                 self.find-vars($e, $subrule);
             }
@@ -113,6 +121,13 @@ class Yapsi::Compiler {
         }
     }
 
+    multi method find-vars(Match $/, 'statement_control_while') {
+        self.find-vars($<expression>, 'expression');
+        my $remember-block = $*current-block;
+        self.find-vars($<block>, 'block');
+        $*current-block = $remember-block;
+    }
+
     multi method find-vars(Match $/, 'lvalue') {
         for <variable declaration> -> $subrule {
             if $/{$subrule} -> $e {
@@ -122,7 +137,7 @@ class Yapsi::Compiler {
     }
 
     multi method find-vars(Match $/, 'value') {
-        for <variable declaration saycall increment> -> $subrule {
+        for <variable declaration saycall increment decrement> -> $subrule {
             if $/{$subrule} -> $e {
                 self.find-vars($e, $subrule);
             }
@@ -170,6 +185,10 @@ class Yapsi::Compiler {
     }
 
     multi method find-vars(Match $/, 'increment') {
+        self.find-vars($<value>, 'value');
+    }
+
+    multi method find-vars(Match $/, 'decrement') {
         self.find-vars($<value>, 'value');
     }
 
@@ -222,6 +241,10 @@ class Yapsi::Compiler {
               && $<statement_control><statement_control_if> -> $e {
             return self.sicify($e, 'statement_control_if');
         }
+        elsif $<statement_control>
+              && $<statement_control><statement_control_while> -> $e {
+            return self.sicify($e, 'statement_control_while');
+        }
     }
 
     multi method sicify(Match $/, 'statement_control_if') {
@@ -250,9 +273,25 @@ class Yapsi::Compiler {
         }
     }
 
+    multi method sicify(Match $/, 'statement_control_while') {
+        my $before-while = self.unique-label;
+        my $after-while = self.unique-label;
+        self.add-code: "`label $before-while";
+        my ($register, $) = self.sicify($<expression>, 'expression');
+        self.add-code: "jf $register, $after-while";
+        my $remember-block = $*current-block;
+        my $block = self.sicify($<block>, 'block');
+        $*current-block = $remember-block;
+        $register = self.unique-register;
+        self.add-code: "$register = fetch-block '$block'";
+        self.add-code: "call $register";
+        self.add-code: "jmp $before-while";
+        self.add-code: "`label $after-while";
+    }
+
     multi method sicify(Match $/, 'expression') {
         for <variable literal declaration assignment binding saycall
-             increment> -> $subrule {
+             increment decrement> -> $subrule {
             if $/{$subrule} -> $e {
                 return self.sicify($e, $subrule);
             }
@@ -260,7 +299,7 @@ class Yapsi::Compiler {
     }
 
     multi method sicify(Match $/, 'lvalue') {
-        for <variable declaration increment> -> $subrule {
+        for <variable declaration increment decrement> -> $subrule {
             if $/{$subrule} -> $e {
                 return self.sicify($e, $subrule);
             }
@@ -268,7 +307,8 @@ class Yapsi::Compiler {
     }
 
     multi method sicify(Match $/, 'value') {
-        for <variable literal declaration saycall increment> -> $subrule {
+        for <variable literal declaration saycall increment decrement>
+                -> $subrule {
             if $/{$subrule} -> $e {
                 return self.sicify($e, $subrule);
             }
@@ -323,6 +363,15 @@ class Yapsi::Compiler {
         die "Can't increment a constant"
             if $variable eq '<constant>';
         self.add-code: "inc $register";
+        self.add-code: "store $variable, $register";
+        return ($register, $variable);
+    }
+
+    multi method sicify(Match $/, 'decrement') {
+        my ($register, $variable) = self.sicify($<value>, 'value');
+        die "Can't decrement a constant"
+            if $variable eq '<constant>';
+        self.add-code: "dec $register";
         self.add-code: "store $variable, $register";
         return ($register, $variable);
     }
@@ -468,6 +517,14 @@ class Yapsi::Runtime {
                     }
                     else {
                         ++@r[+$0];
+                    }
+                }
+                when /^ 'dec $'(\d+) $/ {
+                    if @r[+$0] eq 'Any()' {
+                        @r[+$0] = -1;
+                    }
+                    else {
+                        --@r[+$0];
                     }
                 }
                 when /^ '$'(\d+) ' = fetch-block '\'(<-[']>+)\' $/ {

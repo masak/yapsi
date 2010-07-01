@@ -30,6 +30,7 @@ my @programs-that-compile =
     'if 1 { say 42 }',
     'my $a; if $a {}',
     'if my $a {} else { say 42 }',
+    'my $a; while $a { say $a }',
 ;
 
 sub escape($string) { $string.subst("\n", "\\n", :g) }
