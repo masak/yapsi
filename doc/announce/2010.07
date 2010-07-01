@@ -27,7 +27,7 @@ Having Yapsi run all day on your computer just got a little easier. You're
 welcome.
 
 Quite a lot of features are now within reach of people who are interested in
-hacking on Yapsi. See the docs/LOLHALP file for a list of 'em.
+hacking on Yapsi. See the doc/LOLHALP file for a list of 'em.
 
 Yapsi consists of a compiler and a runtime. The program is compiled down into
 an instruction code that is "closer to the machine", for some imaginary value
