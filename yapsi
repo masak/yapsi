@@ -5,6 +5,15 @@ use Yapsi;
 
 my @TARGETS = <run sic>;
 
+if @*ARGS && @*ARGS[0] eq '--version' {
+    my $revision = qx[git describe];
+    say "This is Yapsi, revision $revision";
+    shift @*ARGS;
+    unless @*ARGS {
+        push @*ARGS, '-e', '';
+    }
+}
+
 my $target = 'run';
 if @*ARGS && @*ARGS[0] ~~ /'--target='(\w+)/ {
     die "Recognized targets: {@TARGETS}"
