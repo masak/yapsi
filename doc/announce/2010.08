@@ -29,9 +29,9 @@ hacking on Yapsi. See the doc/LOLHALP file for a list of 'em.
 Yapsi consists of a compiler and a runtime. The compiler generates a so-called
 instruction code, which is a code of instructions, for the runtime to run.
 This is fairly common, and nothing to be agitated about. The instruction code
-is called SIC, which is probably slightly less common. SIC is extended and
-completely re-thought on a regular basis as its authors gain experience points;
-so don't expect it to stay the same between two consecutive Yapsi releases.
+is called SIC, which is probably slightly less common. SIC is extended,
+re-thought and eaten by the team's pet dugong on a regular basis, so don't
+expect SIC from one release to be runnable on another.
 
 An overarching goal for making a Perl 6 compiler-and-runtime is to use it as
 a server for various other projects, which will hook in at different steps:
