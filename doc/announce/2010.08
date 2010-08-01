@@ -1,0 +1,39 @@
+It is with [[INSERT SLIGHTLY INAPPROPRIATE SIGN OF HAPPINESS HERE]] that I want
+to announce, on behalf of the Yapsi development team, the August 2010 release
+of Yapsi, a Perl 6 compiler written in Perl 6.
+
+You can get it here -- [[INSERT ENCOURAGEMENT HERE]]!
+
+ <http://github.com/downloads/masak/yapsi/yapsi-2010.08.tar.gz>
+
+Yapsi is implemented in Perl 6. It thus requires a Perl 6 implementation to
+build and run. We recommend the 'alpha' branch of Rakudo for this purpose.
+In practice, this means downloading Rakudo Minneapolis (#25) from January
+2010.
+
+Yapsi is an "official and complete" implementation of Perl 6. [[INSERT SILLY
+RATIONALIZATIONS HERE]]
+
+Here's how to get Yapsi up and running, once you have it:
+
+* Make sure you have a built Rakudo alpha in your $PATH as 'alpha'.
+* (Optionally) run 'make' for a load-time speedup.
+
+This month's release introduces [[masak will insert things here]].
+
+Quite a lot of features are within reach of people who are interested in
+hacking on Yapsi. See the doc/LOLHALP file for a list of 'em.
+
+Yapsi consists of a compiler and a runtime. [[INSERT MORE SILLY THING HERE,
+INCLUDING SOMETHING TO THE EFFECT THAT SIC CHANGES OFTEN AND ONE SHOULDN'T
+DEPEND ON IT BEING STABLE]]
+
+An overarching goal for making a Perl 6 compiler-and-runtime is to use it as
+a server for various other projects, which will hook in at different steps:
+
+* A time-traveling debugger (tardis), which hooks into the runtime.
+* A coverage tool (lid), which will also hook into the runtime.
+* A syntax checker (sigmund), which will use output from the parser.
+
+Another overarching goal is to optimize for fun while learning about parsers,
+compilers, and runtimes. We wish you the appropriate amount of fun!
