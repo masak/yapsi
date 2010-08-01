@@ -6,7 +6,7 @@ plan *;
 use Yapsi;
 
 my $out;
-my $clear = method ($out:) { $out = '' }
+my $clear = method ($out is rw:) { $out = '' }
 my $io-collector = class { method say($i) {$out ~= $i ~ "\n"} };
 
 my Yapsi::Compiler $compiler .= new;

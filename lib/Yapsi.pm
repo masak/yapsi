@@ -2,18 +2,24 @@ use v6;
 
 my $VERSION = '2010.08';
 
+my $_PROGRAM; # RAKUDO: Part of workaround required because of [perl #76894]
+
 grammar Yapsi::Perl6::Grammar {
     regex TOP { ^ <statementlist> <.ws> $ }
     regex statementlist { <statement> ** <eat_terminator> }
     token statement { <statement_control> || <expression> || '' }
-    token eat_terminator { <?after '}'> \n || <.ws> ';' }
+    # RAKUDO: <?after '{'> NYRI [perl #76894]
+    token eat_terminator { <?{ $/.CURSOR.pos > 1
+                               && $_PROGRAM.substr($/.CURSOR.pos - 1, 1) eq "\{"
+                           }> \n
+                           || <.ws> ';' }
     token expression { <assignment> || <binding> || <variable> || <literal>
                        || <declaration> || <block>
                        || <saycall> || <increment> || <decrement> }
     token statement_control { <statement_control_if>
                               || <statement_control_while> }
     rule  statement_control_if { 'if' <expression> <block>
-                                 [ 'else' <else=block> ]? }
+                                 [ 'else' <else=.block> ]? }
     rule  statement_control_while { 'while' <expression> <block> }
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
@@ -29,187 +35,250 @@ grammar Yapsi::Perl6::Grammar {
     token block { <.ws> '{' <.ws> <statementlist> <.ws> '}' }
 }
 
-class Yapsi::Environment {
-    has %.pads;
-    has @.containers;
+my $block-number = 0;   # Can be done with 'state' when Rakudo has it
+sub unique-block() {
+    'B' ~ $block-number++;
+}
+
+sub descend-into(Match $m, :$key = "TOP", :&action, :@skip) {
+    action($m, $key);
+    for %($m).keys -> $key {
+        next if $key eq any @skip;
+        given $m{$key} {
+            when Match { descend-into($_, :$key, :&action, :@skip) }
+            when Array { descend-into($_, :$key, :&action, :@skip) for .list }
+            default { die "Unknown thing $_.WHAT() in parse tree!" }
+        }
+    }
+}
+
+sub traverse-bottom-up(Match $m, :$key = "TOP", :&action, :@skip) {
+    unless $key eq any @skip {
+        for %($m).keys -> $key {
+            given $m{$key} {
+                when Match { traverse-bottom-up($_, :$key, :&action, :@skip) }
+                when Array { traverse-bottom-up($_, :$key, :&action, :@skip)
+                                for .list }
+                default { die "Unknown thing $_.WHAT() in parse tree!" }
+            }
+        }
+    }
+    action($m, $key);
+}
+
+my %block-parents;
+
+class Yapsi::Perl6::Actions {
+    my @vars;
+    my &find-declarations = sub ($m, $key) {
+        if $key eq "declaration" {
+            push @vars, ~$m<variable>;
+        }
+    };
+    my &connect-blocks = sub ($name, $block, $m, $key) {
+        if $key eq "block" && $m.ast<name> ne $name {
+            %block-parents{$m.ast<name>} = $block;
+        }
+    };
+
+    method TOP($/) {
+        @vars = ();
+        descend-into($/, :skip['block'], :action(&find-declarations));
+        my $name = unique-block();
+        make my $block = { :$name, :vars(@vars.clone) };
+        descend-into($/, :action(&connect-blocks.assuming($name, $block)));
+    }
+
+    method block($/) {
+        @vars = ();
+        descend-into($/, :skip['block'], :action(&find-declarations));
+        my $name = unique-block();
+        make my $block = { :$name, :vars(@vars.clone) };
+        descend-into($/, :action(&connect-blocks.assuming($name, $block)));
+    }
 }
 
 class Yapsi::Compiler {
     has @.warnings;
 
-    method compile($program, Yapsi::Environment :$env) {
+    method compile($program) {
         @!warnings = ();
+        $_PROGRAM = $program; # RAKUDO: Required because of [perl #76894]
         die "Could not parse"
-            unless Yapsi::Perl6::Grammar.parse($program);
-        my Yapsi::Environment $*env
-            = $env ~~ Yapsi::Environment
-                && defined $env
-                ?? $env !! Yapsi::Environment.new;
-        my $*current-block = '';
-        my @*block-counters; # keeps track of nested block numbers
-        self.find-vars($/, 'block');
-        my @sic = "This is SIC v$VERSION", '', 'environment:';
+            unless Yapsi::Perl6::Grammar.parse(
+                        $program, :actions(Yapsi::Perl6::Actions));
+        my @sic = "This is SIC v$VERSION";
         my $INDENT = '    ';
-        for $*env.pads.keys.sort -> $pad {
-            push @sic, $INDENT ~ $pad ~ ':';
-            for $*env.pads{$pad}.keys -> $var {
-                push @sic, $INDENT x 2 ~ $var ~ ': '
-                           ~ $*env.pads{$pad}{$var}.perl;
+        descend-into($/, :action(-> $m, $key {
+            if $key eq 'TOP'|'block'|'else' {
+                push @sic, '';
+                push @sic, "block '$m.ast<name>':";
+                for $m.ast<vars>.list -> $var {
+                    push @sic, "    `lexvar '$var'";
+                }
+                my @blocksic;
+                my $*c = 0; # unique register counter
+                my $*l = 0; # unique label    counter
+                my @skip = 'block', 'statement_control_if',
+                           'statement_control_while';
+                my &sicify = -> $/, $key {
+                    if $m !=== $/ && $key eq 'block' {
+                        my $register = self.unique-register;
+                        my $block-name = $/.ast<name>;
+                        push @blocksic,
+                            "$register = closure-from-block '$block-name'",
+                            "call $register";
+                    }
+                    elsif $key eq 'statement_control_if' {
+                        traverse-bottom-up(
+                            $<expression>,
+                            :key<expression>,
+                            :@skip,
+                            :action(&sicify)
+                        );
+                        my ($register, $) = $<expression>.ast.list;
+                        my $block-name = $<block>.ast<name>;
+                        my $after-if = self.unique-label;
+                        push @blocksic, "jf $register, $after-if";
+                        $register = self.unique-register;
+                        push @blocksic,
+                            "$register = closure-from-block '$block-name'",
+                            "call $register";
+                        my $after-else;
+                        if $<else> {
+                            $after-else = self.unique-label;
+                            push @blocksic, "jmp $after-else";
+                        }
+                        push @blocksic, "`label $after-if";
+                        if $<else> {
+                            $block-name = $<else>[0].ast<name>;
+                            $register = self.unique-register;
+                            push @blocksic,
+                                "$register = closure-from-block '$block-name'",
+                                "call $register",
+                                "`label $after-else";
+                        }
+                    }
+                    elsif $key eq 'statement_control_while' {
+                        my $before-while = self.unique-label;
+                        my $after-while = self.unique-label;
+                        push @blocksic, "`label $before-while";
+                        traverse-bottom-up(
+                            $<expression>,
+                            :key<expression>,
+                            :@skip,
+                            :action(&sicify)
+                        );
+                        my ($register, $) = $<expression>.ast.list;
+                        push @blocksic, "jf $register, $after-while";
+                        my $block-name = $<block>.ast<name>;
+                        $register = self.unique-register;
+                        push @blocksic,
+                            "$register = closure-from-block '$block-name'",
+                            "call $register",
+                            "jmp $before-while",
+                            "`label $after-while";
+                    }
+                    elsif $key eq 'variable' {
+                        my $register = self.unique-register;
+                        my $current_block = $m.ast;
+                        my $level = 0;
+                        my $slot = -1;
+                        while True {
+                            my @vars = $current_block<vars>.list;
+                            for ^@vars -> $i {
+                                if ~$/ eq @vars[$i] {
+                                    $slot = $i;
+                                    # RAKUDO: Could use a 'last LOOP' here
+                                    last;
+                                }
+                            }
+                            last if $slot != -1;
+                            --$level;
+                            $current_block
+                                = %block-parents{$current_block<name>};
+                            die "Variable '$/' not declared"
+                                unless defined $current_block;
+                        }
+                        my $locator = "[$level, $slot]";
+                        push @blocksic, "$register = fetch $locator";
+                        make [$register, $locator];
+                    }
+                    elsif $key eq 'assignment' {
+                        my ($register, $) = $<expression>.ast.list;
+                        my ($, $locator) = $<lvalue>.ast.list;
+                        push @blocksic, "store $locator, $register";
+                        make [$register, $locator];
+                    }
+                    elsif $key eq 'binding' {
+                        my ($, $leftloc) = $<lvalue>.ast.list;
+                        my ($register, $rightloc) = $<expression>.ast.list;
+                        push @blocksic, "bind $leftloc, $rightloc";
+                        make [$register, $leftloc];
+                    }
+                    elsif $key eq 'value' {
+                        for <variable literal declaration saycall
+                             increment decrement> -> $e {
+                            if $/{$e} {
+                                make $/{$e}.ast;
+                            }
+                        }
+                    }
+                    elsif $key eq 'lvalue' {
+                        for <variable declaration increment decrement> -> $e {
+                            if $/{$e} {
+                                make $/{$e}.ast;
+                            }
+                        }
+                    }
+                    elsif $key eq 'expression' {
+                        for <variable literal declaration assignment binding
+                             saycall increment decrement> -> $e {
+                            if $/{$e} {
+                                make $/{$e}.ast;
+                            }
+                        }
+                    }
+                    elsif $key eq 'literal' {
+                        my $register = self.unique-register;
+                        my $literal = ~$/;
+                        push @blocksic, "$register = $literal";
+                        make [$register, '<constant>'];
+                    }
+                    elsif $key eq 'declaration' {
+                        make $<variable>.ast;
+                    }
+                    elsif $key eq 'increment' {
+                        my ($register, $locator) = $<value>.ast.list;
+                        die "Can't increment a constant"
+                            if $locator eq '<constant>';
+                        push @blocksic, "inc $register",
+                                        "store $locator, $register";
+                        make [$register, $locator];
+                    }
+                    elsif $key eq 'decrement' {
+                        my ($register, $locator) = $<value>.ast.list;
+                        die "Can't increment a constant"
+                            if $locator eq '<constant>';
+                        push @blocksic, "dec $register",
+                                        "store $locator, $register";
+                        make [$register, $locator];
+                    }
+                    elsif $key eq 'saycall' {
+                        my ($register, $) = $<expression>.ast.list;
+                        my $result = self.unique-register;
+                        push @blocksic, "say $register",
+                                        "$result = 1";
+                        make $result;
+                    }
+                };
+                traverse-bottom-up($m, :@skip, :action(&sicify));
+                for renumber declutter @blocksic {
+                    push @sic, $INDENT ~ $_;
+                }
             }
-        }
-        push @sic, $INDENT ~ 'containers: ' ~ $*env.containers.perl;
-        my $*c = 0; # unique register counter
-        my $*l = 0; # unique label    counter
-        my @*block-order;
-        my %*blocks;
-        $*current-block = '';
-        self.sicify($/, 'block');
-        for @*block-order -> $block {
-            push @sic, '';
-            push @sic, "block '$block':";
-            for renumber(declutter(%*blocks{$block})) {
-                push @sic, $INDENT ~ $_;
-            }
-        }
+        }));
         return @sic;
-    }
-
-    multi method find-vars(Match $/, 'statement') {
-        # RAKUDO: Autovivification
-        if $<expression> && $<expression><block> -> $e {
-            my $remember-block = $*current-block;
-            self.find-vars($e, 'block');
-            $*current-block = $remember-block;
-        }
-        elsif $<expression> -> $e {
-            self.find-vars($e, 'expression');
-        }
-        # RAKUDO: Autovivification
-        elsif $<statement_control>
-              && $<statement_control><statement_control_if> -> $e {
-            self.find-vars($e, 'statement_control_if');
-        }
-        # RAKUDO: Autovivification
-        elsif $<statement_control>
-              && $<statement_control><statement_control_while> -> $e {
-            self.find-vars($e, 'statement_control_while');
-        }
-    }
-
-    multi method find-vars(Match $/, 'expression') {
-        # XXX: This warning doesn't have much to do with finding vars
-        if $/<block> {
-            die "Can not handle non-immediate blocks yet. Sorry. :/";
-        }
-        for <assignment binding variable declaration saycall
-             increment decrement> -> $subrule {
-            if $/{$subrule} -> $e {
-                self.find-vars($e, $subrule);
-            }
-        }
-    }
-
-    multi method find-vars(Match $/, 'statement_control_if') {
-        self.find-vars($<expression>, 'expression');
-        my $remember-block = $*current-block;
-        self.find-vars($<block>, 'block');
-        $*current-block = $remember-block;
-        # RAKUDO: Autovivification
-        if $<else> && $<else>[0] -> $e {
-            self.find-vars($e, 'block');
-            $*current-block = $remember-block;
-        }
-    }
-
-    multi method find-vars(Match $/, 'statement_control_while') {
-        self.find-vars($<expression>, 'expression');
-        my $remember-block = $*current-block;
-        self.find-vars($<block>, 'block');
-        $*current-block = $remember-block;
-    }
-
-    multi method find-vars(Match $/, 'lvalue') {
-        for <variable declaration> -> $subrule {
-            if $/{$subrule} -> $e {
-                self.find-vars($e, $subrule);
-            }
-        }
-    }
-
-    multi method find-vars(Match $/, 'value') {
-        for <variable declaration saycall increment decrement> -> $subrule {
-            if $/{$subrule} -> $e {
-                self.find-vars($e, $subrule);
-            }
-        }
-    }
-
-    multi method find-vars(Match $name, 'variable') {
-        my $block = $*current-block;
-        loop {
-            return if $*env.pads{$block}.exists( ~$name );
-            last unless $block ~~ / _\d+ $/;
-            $block.=substr(0, $block.chars - $/.chars);
-        }
-        die "Invalid. $name not declared before use";
-    }
-
-    multi method find-vars(Match $/, 'literal') {
-        die "This multi variant should never be called";
-    }
-
-    multi method find-vars(Match $/, 'declaration') {
-        my $name = ~$<variable>;
-        if $*env.pads{$*current-block}{$name} {
-            @!warnings.push: "Useless redeclaration of variable $name";
-        }
-        else {
-            $*env.pads{$*current-block}{$name}
-                = { :type<container>, :n(+$*env.containers) };
-            push $*env.containers, 'Any()';
-        }
-    }
-
-    multi method find-vars(Match $/, 'assignment') {
-        self.find-vars($<lvalue>, 'lvalue');
-        self.find-vars($<expression>, 'expression');
-    }
-
-    multi method find-vars(Match $/, 'binding') {
-        self.find-vars($<lvalue>, 'lvalue');
-        self.find-vars($<expression>, 'expression');
-    }
-
-    multi method find-vars(Match $/, 'saycall') {
-        self.find-vars($<expression>, 'expression');
-    }
-
-    multi method find-vars(Match $/, 'increment') {
-        self.find-vars($<value>, 'value');
-    }
-
-    multi method find-vars(Match $/, 'decrement') {
-        self.find-vars($<value>, 'value');
-    }
-
-    multi method find-vars(Match $/, 'block') {
-        if $*current-block {
-            $*current-block ~= '_' ~ @*block-counters[*-1]++;
-            push @*block-counters, 1;
-        }
-        else {
-            $*current-block = 'main';
-            @*block-counters = 1;
-        }
-        $*env.pads{$*current-block} //= {};
-        for $<statementlist><statement> -> $statement {
-            self.find-vars($statement, 'statement');
-        }
-        pop @*block-counters;
-    }
-
-    multi method find-vars($/, $node) {
-        die "Don't know what to do with a $node";
     }
 
     method unique-register {
@@ -220,194 +289,20 @@ class Yapsi::Compiler {
         return 'L' ~ $*l++;
     }
 
-    method add-code($line) {
-        %*blocks{$*current-block}.push($line);
-    }
-
-    multi method sicify(Match $/, 'statement') {
-        # RAKUDO: Autovivification
-        if $<expression> && $<expression><block> -> $e {
-            my $remember-block = $*current-block;
-            my $block = self.sicify($e, 'block');
-            $*current-block = $remember-block;
-            my $register = self.unique-register;
-            self.add-code: "$register = fetch-block '$block'";
-            self.add-code: "call $register";
-        }
-        elsif $<expression> -> $e {
-            return self.sicify($e, 'expression');
-        }
-        elsif $<statement_control>
-              && $<statement_control><statement_control_if> -> $e {
-            return self.sicify($e, 'statement_control_if');
-        }
-        elsif $<statement_control>
-              && $<statement_control><statement_control_while> -> $e {
-            return self.sicify($e, 'statement_control_while');
-        }
-    }
-
-    multi method sicify(Match $/, 'statement_control_if') {
-        my ($register, $) = self.sicify($<expression>, 'expression');
-        my $remember-block = $*current-block;
-        my $block = self.sicify($<block>, 'block');
-        $*current-block = $remember-block;
-        my $after-if = self.unique-label;
-        self.add-code: "jf $register, $after-if";
-        $register = self.unique-register;
-        self.add-code: "$register = fetch-block '$block'";
-        self.add-code: "call $register";
-        my $after-else;
-        if $<else> {
-            $after-else = self.unique-label;
-            self.add-code: "jmp $after-else";
-        }
-        self.add-code: "`label $after-if";
-        if $<else> {
-            $block = self.sicify($<else>[0], 'block');
-            $*current-block = $remember-block;
-            $register = self.unique-register;
-            self.add-code: "$register = fetch-block '$block'";
-            self.add-code: "call $register";
-            self.add-code: "`label $after-else";
-        }
-    }
-
-    multi method sicify(Match $/, 'statement_control_while') {
-        my $before-while = self.unique-label;
-        my $after-while = self.unique-label;
-        self.add-code: "`label $before-while";
-        my ($register, $) = self.sicify($<expression>, 'expression');
-        self.add-code: "jf $register, $after-while";
-        my $remember-block = $*current-block;
-        my $block = self.sicify($<block>, 'block');
-        $*current-block = $remember-block;
-        $register = self.unique-register;
-        self.add-code: "$register = fetch-block '$block'";
-        self.add-code: "call $register";
-        self.add-code: "jmp $before-while";
-        self.add-code: "`label $after-while";
-    }
-
-    multi method sicify(Match $/, 'expression') {
-        for <variable literal declaration assignment binding saycall
-             increment decrement> -> $subrule {
-            if $/{$subrule} -> $e {
-                return self.sicify($e, $subrule);
-            }
-        }
-    }
-
-    multi method sicify(Match $/, 'lvalue') {
-        for <variable declaration increment decrement> -> $subrule {
-            if $/{$subrule} -> $e {
-                return self.sicify($e, $subrule);
-            }
-        }
-    }
-
-    multi method sicify(Match $/, 'value') {
-        for <variable literal declaration saycall increment decrement>
-                -> $subrule {
-            if $/{$subrule} -> $e {
-                return self.sicify($e, $subrule);
-            }
-        }
-    }
-
-    multi method sicify(Match $/, 'variable') {
-        my $register = self.unique-register;
-        my $variable = "'$/'";
-        self.add-code: "$register = fetch $variable";
-        return ($register, $variable);
-    }
-
-    multi method sicify(Match $/, 'literal') {
-        my $register = self.unique-register;
-        my $literal = ~$/;
-        self.add-code: "$register = $literal";
-        return ($register, '<constant>');
-    }
-
-    multi method sicify(Match $/, 'declaration') {
-        return self.sicify($<variable>, 'variable');
-    }
-
-    multi method sicify(Match $/, 'assignment') {
-        my ($register, $) = self.sicify($<expression>, 'expression');
-        my ($, $variable) = self.sicify($<lvalue>, 'lvalue');
-        self.add-code: "store $variable, $register";
-        return ($register, $variable);
-    }
-
-    multi method sicify(Match $/, 'binding') {
-        my ($register, $rightvar) = self.sicify($<expression>, 'expression');
-        my ($, $leftvar) = self.sicify($<lvalue>, 'lvalue');
-        if $rightvar ~~ / ^ \d+ $ / { # hm. this is brittle and suboptimal.
-            $rightvar = $register;
-        }
-        self.add-code: "bind $leftvar, $rightvar";
-        return ($register, $leftvar);
-    }
-
-    multi method sicify(Match $/, 'saycall') {
-        my ($register, $) = self.sicify($<expression>, 'expression');
-        my $result = self.unique-register;
-        self.add-code: "say $register";
-        self.add-code: "$result = 1";
-        return ($result, 1);
-    }
-
-    multi method sicify(Match $/, 'increment') {
-        my ($register, $variable) = self.sicify($<value>, 'value');
-        die "Can't increment a constant"
-            if $variable eq '<constant>';
-        self.add-code: "inc $register";
-        self.add-code: "store $variable, $register";
-        return ($register, $variable);
-    }
-
-    multi method sicify(Match $/, 'decrement') {
-        my ($register, $variable) = self.sicify($<value>, 'value');
-        die "Can't decrement a constant"
-            if $variable eq '<constant>';
-        self.add-code: "dec $register";
-        self.add-code: "store $variable, $register";
-        return ($register, $variable);
-    }
-
-    multi method sicify(Match $/, 'block') {
-        if $*current-block {
-            $*current-block ~= '_' ~ @*block-counters[*-1]++;
-            push @*block-counters, 1;
-        }
-        else {
-            $*current-block = 'main';
-            @*block-counters = 1;
-        }
-        @*block-order.push($*current-block);
-        %*blocks{$*current-block} = [];
-        for $<statementlist><statement> -> $statement {
-            self.sicify($statement, 'statement');
-        }
-        pop @*block-counters;
-        return $*current-block;
-    }
-
-    multi method sicify(Match $/, $node) {
-        die "Don't know what to do with a $node";
-    }
-
     sub declutter(@instructions) {
         my @decluttered;
         for @instructions.kv -> $i, $line {
-            if $line !~~ / ^ ('$' \d+) ' =' / {
+            # RAKUDO: !~~ doesn't bind $/
+            if not $line ~~ / ^ ('$' \d+) ' =' / {
                 push @decluttered, $line;
             }
             else {
                 my $varname = ~$0;
                 my Bool $usages-later = False;
-                for $i+1 ..^ @instructions -> $j {
+                for $i+1 ..^ +@instructions -> $j {
+                    # XXX: This heuristic fails when we reach many-digit
+                    #      reguster names, since it gives false positives
+                    #      for all prefixes
                     ++$usages-later
                         if defined index(@instructions[$j], $varname);
                 }
@@ -422,9 +317,11 @@ class Yapsi::Compiler {
     sub renumber(@instructions) {
         my $number = 0;
         my %mapping;
+        # RAKUDO: $/ doesn't work in .subst closures
+        my $hack;
         return @instructions.map: {
-            .subst( :global, / ('$' \d+) /, {
-                my $varname = ~$0;
+            .subst( :global, / ('$' \d+) { $hack = ~$0 } /, {
+                my $varname = $hack;
                 if !%mapping.exists($varname) {
                     %mapping{$varname} = '$' ~ $number++;
                 }
@@ -434,156 +331,153 @@ class Yapsi::Compiler {
     }
 }
 
+class Value {
+    has $.payload;
+
+    method store($v) { die "Can't assign to a readonly value" }
+}
+
+class Container {
+    has Value $!value;
+
+    method store(Value $v) { $!value = $v }
+    method fetch() { $!value }
+    method payload() { $!value.defined ?? $!value.payload !! "Any()" }
+}
+
+class Lexpad {
+    has @.slots;
+    has %.names;
+    has Lexpad $.outer;
+
+    method Str {
+        "lexpad[" ~ %.names.sort(*.value)>>.key.join(", ") ~ "]";
+    }
+}
+
+class Closure {
+    has $.block;
+    has Lexpad $.outer;
+}
+
+sub new-lexpad-from(@sic, $line is copy, Lexpad $outer?) {
+    my @lexvars;
+    while @sic[++$line] ~~ / '    `' (\S*) \s+ \'(<-[']>+)\' / {
+        given $0 {
+            when "lexvar" { push @lexvars, ~$1 }
+            default { die "Unknown directive $0"; }
+        }
+    }
+    return Lexpad.new(:slots(map { Container.new }, ^@lexvars),
+                      :names((hash @lexvars.kv).invert),
+                      :$outer);
+}
+
+sub find-block(@sic, $name) {
+    for @sic.kv -> $n, $line {
+        return $n
+            if $line ~~ / ^ 'block '\'(<-[']>+)\'':' $ / && $0 eq $name;
+    }
+    die "Didn't find block $name";
+}
+
+sub find-label(@sic, $name) {
+    for @sic.kv -> $n, $line {
+        return $n
+            if $line ~~ / ^ '    `label '(\S+) $ / && $0 eq $name;
+    }
+    die "Didn't find label $name";
+}
+
 subset Yapsi::IO where { .can('say') }
 
 class Yapsi::Runtime {
     has Yapsi::IO $!io = $*OUT;
-    has Yapsi::Environment $.env;
-
-    has $!current-block;
 
     method run(@sic) {
-        if @sic[0] !~~ /^ 'This is SIC v'(\d\d\d\d\.\d\d) $/ {
+        # RAKUDO: Need to use 'not' here rather than '!~~' [perl #76892]
+        if not @sic[0] ~~ /^ 'This is SIC v'(\d\d\d\d\.\d\d) $/ {
             die "Incompatible SIC version line";
         }
         elsif ~$0 ne $VERSION {
             die "SIC is $0 but this is $VERSION -- cannot run";
         }
-        {
-            $!env = Yapsi::Environment.new;
-            my $line = 3;
-            my $block;
-            while @sic[$line++] -> $decl {
-                if $decl ~~ /^ '    containers: ' (.+) $/ {
-                    $!env.containers.push($_) for eval(~$0).list;
-                }
-                elsif $decl ~~ /^ '        ' (<-[:]>+) ': ' (.+) $/ {
-                    $!env.pads{$block}{~$0} = eval(~$1);
-                }
-                elsif $decl ~~ /^ '    ' (<-[:]>+) ':' $/ {
-                    $block = ~$0;
-                    $!env.pads{$block} //= {};
-                }
-                else {
-                    die "Unknown environment declaration `$decl`";
-                }
-            }
+
+        my @registers-stack = [];
+        my @ip-stack;
+
+        sub reg() { @registers-stack[@registers-stack - 1] }
+        sub n-up-from($lexpad is copy, $levels) {
+            $lexpad.=outer for ^$levels;
+            die "Went too far and ended up nowhere"
+                unless defined $lexpad;
+            $lexpad;
         }
-        my @r;
-        $!current-block = 'main';
-        my $ip = find-block(@sic, $!current-block) + 1;
-        my @stack;
-        self.*tick;
-        loop {
-            if $ip >= @sic || @sic[$ip] eq '' {
-                return unless @stack;
-                $ip = pop @stack;
-                $!current-block .= substr(0, -2);
-                redo;
-            }
-            given @sic[$ip++].substr(4) {
-                when /^ '$'(\d+) ' = ' (\d+) $/ {
-                    @r[+$0] = +$1
-                }
-                when /^ 'store ' \'(<-[']>+)\' ', $'(\d+) $/ {
-                    my $thing = locate-variable($!env.pads, $!current-block, ~$0);
-                    if $thing<type> eq 'container' {
-                        my $n = $thing<n>;
-                        $!env.containers[$n] = @r[+$1];
+
+        my $current-lexpad = new-lexpad-from(@sic, 2);
+        my $ip = 3;
+        while @registers-stack {
+            while @sic[$ip++] -> $line {
+                given $line.substr(4) {
+                    when / ^ '`' / {}
+                    when / ^ '$'(\d+) ' = ' (\d+) $ / { reg[+$0] = +$1 }
+                    when / ^ 'store ['[(0)||'-'(\d+)]', '(\d+)'], $'(\d+) $ / {
+                        my ($levels, $slot, $register) = +$0, +$1, +$2;
+                        my $lexpad = n-up-from($current-lexpad, $levels);
+                        $lexpad.slots[$slot].store(
+                            Value.new( :payload(reg[$register]) )
+                        );
                     }
-                    else {
-                        die "Cannot store something in readonly symbol ~$0";
+                    when / ^ '$'(\d+)' = fetch ['[(0)||'-'(\d+)]', '(\d+)']' $ / {
+                        my ($register, $levels, $slot) = +$0, +$1, +$2;
+                        my $lexpad = n-up-from($current-lexpad, $levels);
+                        reg[$register] = $lexpad.slots[$slot].payload();
                     }
-                    self.*tick;
-                }
-                when /^ '$'(\d+) ' = fetch '\'(<-[']>+)\' $/ {
-                    @r[+$0] = self.get-value-of(~$1);
-                }
-                when /^ 'bind ' \'(<-[']>+)\' ', ' \'(<-[']>+)\' $/ {
-                    $!env.pads{$!current-block}{~$0} = $!env.pads{$!current-block}{~$1};
-                    self.*tick;
-                }
-                when /^ 'bind ' \'(<-[']>+)\' ', $'(\d+) $/ {
-                    $!env.pads{$!current-block}{~$0}
-                        = { :type<immediate>, :value(+$1) };
-                }
-                when /^ 'say $'(\d+) $/ {
-                    $!io.say: @r[+$0];
-                    self.*tick;
-                }
-                when /^ 'inc $'(\d+) $/ {
-                    if @r[+$0] eq 'Any()' {
-                        @r[+$0] = 1;
+                    when / ^ 'bind ['[(0)||'-'(\d+)]', '(\d+)'], '
+                                  '['[(0)||'-'(\d+)]', '(\d+)']' $ / {
+                        my ($var1-levels, $var1-slot) = +$0, +$1;
+                        my $var1-lexpad = n-up-from($current-lexpad, $var1-levels);
+                        my ($var2-levels, $var2-slot) = +$2, +$3;
+                        my $var2-lexpad = n-up-from($current-lexpad, $var2-levels);
+                        $var1-lexpad.slots[$var1-slot] = $var2-lexpad.slots[$var2-slot];
                     }
-                    else {
-                        ++@r[+$0];
+                    when / ^ 'inc $'(\d+) $ / {
+                        reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] + 1;
                     }
-                }
-                when /^ 'dec $'(\d+) $/ {
-                    if @r[+$0] eq 'Any()' {
-                        @r[+$0] = -1;
+                    when / ^ 'dec $'(\d+) $ / {
+                        reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] - 1;
                     }
-                    else {
-                        --@r[+$0];
+                    when / ^ 'jf $'(\d+)', '(\S+) $ / {
+                        if reg[+$0] == 0 {
+                            $ip = find-label(@sic, ~$1);
+                        }
                     }
-                }
-                when /^ '$'(\d+) ' = fetch-block '\'(<-[']>+)\' $/ {
-                    @r[+$0] = ~$1;
-                }
-                when /^ 'call $'(\d+) $/ {
-                    push @stack, $ip;
-                    $ip = find-block(@sic, @r[+$0]) + 1;
-                    $!current-block = @r[+$0];
-                }
-                when /^ 'jmp '(.*) $/ {
+                    when / ^ 'jmp '(\S+) $ / {
                         $ip = find-label(@sic, ~$0);
-                }
-                when /^ 'jf $'(\d+)', '(.*) $/ {
-                    if @r[+$0] == 0 {
-                        $ip = find-label(@sic, ~$1);
-                        # XXX: This could result in $!current-block no longer
-                        #      being current, if the jump was to another block
+                    }
+                    when / ^ '$'(\d+)' = closure-from-block '\'(<-[']>+)\' $ / {
+                        reg[+$0] = Closure.new(:block(~$1), :outer($current-lexpad));
+                    }
+                    when / ^ 'call $'(\d+) $ / {
+                        die "Trying to call a non-closure"
+                            if (my $closure = reg[+$0]) !~~ Closure;
+                        push @registers-stack, [];
+                        push @ip-stack, $ip;
+                        $ip = find-block(@sic, $closure.block);
+                        $current-lexpad = new-lexpad-from(@sic, $ip, $closure.outer);
+                        ++$ip;
+                    }
+                    when / ^ 'say $'(\d+) $ / {
+                        $!io.say(reg[+$0]);
+                    }
+                    default {
+                        die "Unknown instruction: ", $_;
                     }
                 }
-                when /^ '`' / {
-                }
-                default { die "Couldn't handle instruction `$_`" }
             }
+            pop @registers-stack;
+            $ip = pop @ip-stack;
+            $current-lexpad.=outer;
         }
-    }
-
-    sub find-block(@sic, Str $block-sought) {
-        for ^@sic {
-            if @sic[$_] ~~ /^'block ' \'(<-[']>+)\'/ && ~$0 eq $block-sought {
-                return $_;
-            }
-        }
-        die "Could not find block '$block-sought'";
-    }
-
-    sub find-label(@sic, Str $label-sought) {
-        for ^@sic {
-            if @sic[$_] ~~ /^ \s+ '`label ' (.*)/ && ~$0 eq $label-sought {
-                return $_;
-            }
-        }
-        die "Could not find label '$label-sought'";
-    }
-
-    sub locate-variable(%pads, $block is copy, Str $name) {
-        loop {
-            return %pads{$block}{$name}
-                if %pads{$block}.exists($name);
-            last unless $block ~~ / _\d+ $/;
-            $block.=substr(0, $block.chars - $/.chars);
-        }
-        die "Runtime panic -- could not find variable $name";
-    }
-
-    method get-value-of($variable) {
-        my $thing = locate-variable($!env.pads, $!current-block, $variable);
-        return $thing<type> eq 'container'
-            ?? $!env.containers[$thing<n>]
-            !! $thing<value>;
     }
 }

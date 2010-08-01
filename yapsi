@@ -1,4 +1,4 @@
-#!/usr/bin/env alpha
+#!/usr/bin/env perl6
 use v6;
 
 use Yapsi;
@@ -34,10 +34,11 @@ else {
 }
 
 try {
-    my Yapsi::Compiler $compiler .= new;
-
-    my @sic = $compiler.compile($program);
-    warn $_ for $compiler.warnings;
+    my @sic;
+    given Yapsi::Compiler.new {
+        @sic = .compile($program);
+        warn $_ for .warnings;
+    }
 
     if $target eq 'sic' {
         .say for @sic;
