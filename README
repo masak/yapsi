@@ -1,21 +1,10 @@
 = Yapsi -- Yet Another Perl Six Implementation
 
-This is an implementation of a Perl 6 compiler-and-runtime in Perl 6. It
-currently runs off the old, pre-refactor branch of Rakudo known as 'alpha'.
-You need to have an old version of Rakudo installed (say, the 2010-01
-release), and available in your path under the name 'alpha'.
+This is an implementation of a Perl 6 compiler-and-runtime in Perl 6.
 
 == Building Yapsi
 
-This assumes that you have a working installation of alpha somewhere in
-your $PATH. Yapsi currently works on top of alpha, an older branch of rakudo.
-If you have not built alpha yet, please build it by doing a git clone from 
-<git://github.com/rakudo/rakudo.git> and "git checkout origin/alpha".
-
-To build Yapsi:
-    * type make in the directory where you've cloned Yapsi.
-    * copy the generated lib/Yapsi.pir to $PERL6LIB or ~/.perl6/lib folder. 
-
+$ ufo && make
 
 == Features currently available in Yapsi
 
@@ -35,10 +24,7 @@ $ ./yapsi -e 'my $a = 42; while --$a { say $a }'
 In other words, Yapsi currently handles declaration, immediate blocks,
 assignment, binding, prefix increment/decrement, if/while, and say.
 
-The compiler also detects use-before-declaration and syntax errors.
-
-$ ./yapsi -e '$a; my $a'
-Invalid. $a not declared before use
+The compiler also detects syntax errors.
 
 $ ./yapsi -e 'say say'
 Could not parse
