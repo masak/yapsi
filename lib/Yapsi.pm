@@ -114,7 +114,7 @@ class Yapsi::Compiler {
                 push @sic, '';
                 push @sic, "block '$m.ast<name>':";
                 for $m.ast<vars>.list -> $var {
-                    push @sic, "    `lexvar '$var'";
+                    push @sic, "    `var '$var'";
                 }
                 my @blocksic;
                 my $*c = 0; # unique register counter
@@ -361,15 +361,15 @@ class Closure {
 }
 
 sub new-lexpad-from(@sic, $line is copy, Lexpad $outer?) {
-    my @lexvars;
+    my @vars;
     while @sic[++$line] ~~ / '    `' (\S*) \s+ \'(<-[']>+)\' / {
         given $0 {
-            when "lexvar" { push @lexvars, ~$1 }
+            when "var" { push @vars, ~$1 }
             default { die "Unknown directive $0"; }
         }
     }
-    return Lexpad.new(:slots(map { Container.new }, ^@lexvars),
-                      :names((hash @lexvars.kv).invert),
+    return Lexpad.new(:slots(map { Container.new }, ^@vars),
+                      :names((hash @vars.kv).invert),
                       :$outer);
 }
 
