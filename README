@@ -10,23 +10,23 @@ $ ufo && make
 
 Right now you can do things like this:
 
-$ ./yapsi -e 'say 42'
+$ bin/yapsi -e 'say 42'
 42
 
-$ ./yapsi -e 'my $a; { $a = 5 }; say $a'
+$ bin/yapsi -e 'my $a; { $a = 5 }; say $a'
 5
 
-$ ./yapsi -e 'my $a = 5; my $b := $a; $b = 41; ++$b; say $a'
+$ bin/yapsi -e 'my $a = 5; my $b := $a; $b = 41; ++$b; say $a'
 42
 
-$ ./yapsi -e 'my $a = 42; while --$a { say $a }'
+$ bin/yapsi -e 'my $a = 42; while --$a { say $a }'
 
 In other words, Yapsi currently handles declaration, immediate blocks,
 assignment, binding, prefix increment/decrement, if/while, and say.
 
 The compiler also detects syntax errors.
 
-$ ./yapsi -e 'say say'
+$ bin/yapsi -e 'say say'
 Could not parse
 
 == Near-future directions
