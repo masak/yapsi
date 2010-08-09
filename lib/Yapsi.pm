@@ -9,8 +9,8 @@ grammar Yapsi::Perl6::Grammar {
     regex statementlist { <statement> ** <eat_terminator> }
     token statement { <statement_control> || <expression> || '' }
     # RAKUDO: <?after '{'> NYRI [perl #76894]
-    token eat_terminator { <?{ $/.CURSOR.pos > 1
-                               && $_PROGRAM.substr($/.CURSOR.pos - 1, 1) eq "\{"
+    regex eat_terminator { <?{ $/.CURSOR.pos > 0
+                               && $_PROGRAM.substr($/.CURSOR.pos - 1, 1) eq '}'
                            }> \n
                            || <.ws> ';' }
     token expression { <assignment> || <binding> || <variable> || <literal>
