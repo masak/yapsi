@@ -40,13 +40,14 @@ sub unique-block() {
     'B' ~ $block-number++;
 }
 
-sub descend-into(Match $m, :$key = "TOP", :&action, :@skip) {
+sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
     action($m, $key);
     for %($m).keys -> $key {
         next if $key eq any @skip;
         given $m{$key} {
-            when Match { descend-into($_, :$key, :&action, :@skip) }
-            when Array { descend-into($_, :$key, :&action, :@skip) for .list }
+            when Match { traverse-top-down($_, :$key, :&action, :@skip) }
+            when Array { traverse-top-down($_, :$key, :&action, :@skip)
+                            for .list }
             default { die "Unknown thing $_.WHAT() in parse tree!" }
         }
     }
@@ -83,18 +84,20 @@ class Yapsi::Perl6::Actions {
 
     method TOP($/) {
         @vars = ();
-        descend-into($/, :skip['block'], :action(&find-declarations));
+        traverse-top-down($/, :skip['block'], :action(&find-declarations));
         my $name = unique-block();
         make my $block = { :$name, :vars(@vars.clone) };
-        descend-into($/, :action(&connect-blocks.assuming($name, $block)));
+        traverse-top-down($/,
+                          :action(&connect-blocks.assuming($name, $block)));
     }
 
     method block($/) {
         @vars = ();
-        descend-into($/, :skip['block'], :action(&find-declarations));
+        traverse-top-down($/, :skip['block'], :action(&find-declarations));
         my $name = unique-block();
         make my $block = { :$name, :vars(@vars.clone) };
-        descend-into($/, :action(&connect-blocks.assuming($name, $block)));
+        traverse-top-down($/,
+                          :action(&connect-blocks.assuming($name, $block)));
     }
 }
 
@@ -109,7 +112,7 @@ class Yapsi::Compiler {
                         $program, :actions(Yapsi::Perl6::Actions));
         my @sic = "This is SIC v$VERSION";
         my $INDENT = '    ';
-        descend-into($/, :action(-> $m, $key {
+        traverse-top-down($/, :action(-> $m, $key {
             if $key eq 'TOP'|'block'|'else' {
                 push @sic, '';
                 push @sic, "block '$m.ast<name>':";
