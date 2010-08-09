@@ -83,7 +83,7 @@ class Yapsi::Perl6::Actions {
     };
 
     method TOP($/) {
-        block($/);
+        self.block($/);
     }
 
     method block($/) {
