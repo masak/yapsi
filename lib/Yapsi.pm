@@ -431,7 +431,8 @@ class Yapsi::Runtime {
                             Value.new( :payload(reg[$register]) )
                         );
                     }
-                    when / ^ '$'(\d+)' = fetch ['[(0)||'-'(\d+)]', '(\d+)']' $ / {
+                    when / ^ '$'(\d+)' = fetch
+                             ['[(0)||'-'(\d+)]', '(\d+)']' $ / {
                         my ($register, $levels, $slot) = +$0, +$1, +$2;
                         my $lexpad = n-up-from($current-lexpad, $levels);
                         reg[$register] = $lexpad.slots[$slot].payload();
@@ -439,10 +440,13 @@ class Yapsi::Runtime {
                     when / ^ 'bind ['[(0)||'-'(\d+)]', '(\d+)'], '
                                   '['[(0)||'-'(\d+)]', '(\d+)']' $ / {
                         my ($var1-levels, $var1-slot) = +$0, +$1;
-                        my $var1-lexpad = n-up-from($current-lexpad, $var1-levels);
+                        my $var1-lexpad
+                            = n-up-from($current-lexpad, $var1-levels);
                         my ($var2-levels, $var2-slot) = +$2, +$3;
-                        my $var2-lexpad = n-up-from($current-lexpad, $var2-levels);
-                        $var1-lexpad.slots[$var1-slot] = $var2-lexpad.slots[$var2-slot];
+                        my $var2-lexpad
+                            = n-up-from($current-lexpad, $var2-levels);
+                        $var1-lexpad.slots[$var1-slot]
+                            = $var2-lexpad.slots[$var2-slot];
                     }
                     when / ^ 'inc $'(\d+) $ / {
                         reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] + 1;
@@ -458,8 +462,10 @@ class Yapsi::Runtime {
                     when / ^ 'jmp '(\S+) $ / {
                         $ip = find-label(@sic, ~$0);
                     }
-                    when / ^ '$'(\d+)' = closure-from-block '\'(<-[']>+)\' $ / {
-                        reg[+$0] = Closure.new(:block(~$1), :outer($current-lexpad));
+                    when / ^ '$'(\d+)' = closure-from-block '
+                             \'(<-[']>+)\' $ / {
+                        reg[+$0] = Closure.new(:block(~$1),
+                                               :outer($current-lexpad));
                     }
                     when / ^ 'call $'(\d+) $ / {
                         die "Trying to call a non-closure"
@@ -467,7 +473,8 @@ class Yapsi::Runtime {
                         push @registers-stack, [];
                         push @ip-stack, $ip;
                         $ip = find-block(@sic, $closure.block);
-                        $current-lexpad = new-lexpad-from(@sic, $ip, $closure.outer);
+                        $current-lexpad
+                            = new-lexpad-from(@sic, $ip, $closure.outer);
                         ++$ip;
                     }
                     when / ^ 'say $'(\d+) $ / {
