@@ -83,12 +83,7 @@ class Yapsi::Perl6::Actions {
     };
 
     method TOP($/) {
-        @vars = ();
-        traverse-top-down($/, :skip['block'], :action(&find-declarations));
-        my $name = unique-block();
-        make my $block = { :$name, :vars(@vars.clone) };
-        traverse-top-down($/,
-                          :action(&connect-blocks.assuming($name, $block)));
+        block($/);
     }
 
     method block($/) {
