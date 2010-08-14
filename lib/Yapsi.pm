@@ -360,7 +360,10 @@ class Closure {
 
 sub new-lexpad-from(@sic, $line is copy, Lexpad $outer?) {
     my @vars;
-    while @sic[++$line] ~~ / '    `' (\S*) \s+ \'(<-[']>+)\' / {
+    # RAKUDO: Some Any()s seem to end up in the @sic array. Hence the
+    #         need for prefix:<~>. Would be interesting to learn where
+    #         this happens.
+    while ~@sic[++$line] ~~ / '    `' (\S*) \s+ \'(<-[']>+)\' / {
         given $0 {
             when "var" { push @vars, ~$1 }
             default { die "Unknown directive $0"; }
