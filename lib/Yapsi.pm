@@ -426,8 +426,8 @@ class Yapsi::Runtime {
                             Value.new( :payload(reg[$register]) )
                         );
                     }
-                    when / ^ '$'(\d+)' = fetch
-                             ['[(0)||'-'(\d+)]', '(\d+)']' $ / {
+                    when / ^ '$'(\d+)' = fetch '
+                             '['[(0)||'-'(\d+)]', '(\d+)']' $ / {
                         my ($register, $levels, $slot) = +$0, +$1, +$2;
                         my $lexpad = n-up-from($current-lexpad, $levels);
                         reg[$register] = $lexpad.slots[$slot].payload();
