@@ -1,7 +1,7 @@
 The below things should be fairly straightforward to implement. Just look in
 the commit logs at how similar features were implemented.
 
-* 'unless' and 'until' keywords.
+* 'until' keywords.
 * 'loop' keyword. (at least the infinitely looping version is easy.)
 * 'repeat' keyword.
 * 'ENTER', 'LEAVE', 'FIRST', 'NEXT', and 'LAST' phasers.

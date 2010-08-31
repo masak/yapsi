@@ -34,6 +34,8 @@ my @tests =
     'my $a = 4; while --$a { say $a }',
                                        "3\n2\n1\n", 'while loop',
     'my $a; while $a { say 42 }',      "",          'non-executing while loop',
+    'my $a = 42;unless $a { say 24 }',  "",          'non-executing unless block',
+    'unless 0 { say 42 }',  "42\n",       'executing unless block',
 #   TODO -- Need to "instantiate" lexpads from some kind of "proto-lexpads"
 #    'my $a = 3; while --$a { say my $b; $b = 42 }', "Any()\nAny()\n",
 #                'each time a block is entered, it gets a fresh lexical pad',

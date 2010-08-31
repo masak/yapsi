@@ -17,10 +17,12 @@ grammar Yapsi::Perl6::Grammar {
                        || <declaration> || <block>
                        || <saycall> || <increment> || <decrement> }
     token statement_control { <statement_control_if>
-                              || <statement_control_while> }
+                              || <statement_control_while> 
+                              || <statement_control_unless> }
     rule  statement_control_if { 'if' <expression> <block>
                                  [ 'else' <else=.block> ]? }
     rule  statement_control_while { 'while' <expression> <block> }
+    rule statement_control_unless { 'unless' <expression> <block> }
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
                   || <increment> }
@@ -118,7 +120,7 @@ class Yapsi::Compiler {
                 my $*c = 0; # unique register counter
                 my $*l = 0; # unique label    counter
                 my @skip = 'block', 'statement_control_if',
-                           'statement_control_while';
+                           'statement_control_while', 'statement_control_unless';
                 my &sicify = -> $/, $key {
                     if $m !=== $/ && $key eq 'block' {
                         my $register = self.unique-register;
@@ -156,6 +158,23 @@ class Yapsi::Compiler {
                                 "call $register",
                                 "`label $after-else";
                         }
+                    }
+                    elsif $key eq 'statement_control_unless' {
+                        traverse-bottom-up(
+                            $<expression>,
+                            :key<expression>,
+                            :@skip,
+                            :action(&sicify)
+                        );
+                        my ($register, $) = $<expression>.ast.list;
+                        my $block-name = $<block>.ast<name>;
+                        my $after-unless = self.unique-label;
+                        push @blocksic, "jt $register, $after-unless";
+                        $register = self.unique-register;
+                        push @blocksic,
+                            "$register = closure-from-block '$block-name'",
+                            "call $register";
+                        push @blocksic, "`label $after-unless";
                     }
                     elsif $key eq 'statement_control_while' {
                         my $before-while = self.unique-label;
@@ -454,6 +473,11 @@ class Yapsi::Runtime {
                     }
                     when / ^ 'jf $'(\d+)', '(\S+) $ / {
                         if reg[+$0] == 0 {
+                            $ip = find-label(@sic, ~$1);
+                        }
+                    }
+                    when / ^ 'jt $'(\d+)', '(\S+) $ / {
+                        if reg[+$0] != 0 {
                             $ip = find-label(@sic, ~$1);
                         }
                     }

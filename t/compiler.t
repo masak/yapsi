@@ -61,6 +61,8 @@ my @programs-that-don't-compile =   # '
     'if $a {}',
     'if 42 { $a }',
     'if 5 {} else { $a }',
+    'unless 0 { say "unless" }',
+    'unless $a { say $a }'
 ;
 
 for @programs-that-don't-compile -> $program { # '
