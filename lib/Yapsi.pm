@@ -17,11 +17,11 @@ grammar Yapsi::Perl6::Grammar {
                        || <declaration> || <block>
                        || <saycall> || <increment> || <decrement> }
     token statement_control { <statement_control_if>
-                              || <statement_control_while> 
+                              || <statement_control_while_until> 
                               || <statement_control_unless> }
     rule  statement_control_if { 'if' <expression> <block>
                                  [ 'else' <else=.block> ]? }
-    rule  statement_control_while { 'while' <expression> <block> }
+    rule  statement_control_while_until { $<keyword>=[ 'while' | 'until' ] <expression> <block> }
     rule statement_control_unless { 'unless' <expression> <block> }
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
@@ -120,7 +120,7 @@ class Yapsi::Compiler {
                 my $*c = 0; # unique register counter
                 my $*l = 0; # unique label    counter
                 my @skip = 'block', 'statement_control_if',
-                           'statement_control_while', 'statement_control_unless';
+                           'statement_control_while_until', 'statement_control_unless';
                 my &sicify = -> $/, $key {
                     if $m !=== $/ && $key eq 'block' {
                         my $register = self.unique-register;
@@ -176,7 +176,7 @@ class Yapsi::Compiler {
                             "call $register";
                         push @blocksic, "`label $after-unless";
                     }
-                    elsif $key eq 'statement_control_while' {
+                    elsif $key eq 'statement_control_while_until' {
                         my $before-while = self.unique-label;
                         my $after-while = self.unique-label;
                         push @blocksic, "`label $before-while";
@@ -187,7 +187,14 @@ class Yapsi::Compiler {
                             :action(&sicify)
                         );
                         my ($register, $) = $<expression>.ast.list;
-                        push @blocksic, "jf $register, $after-while";
+                        given $<keyword> {
+                            when / while / {
+                                push @blocksic, "jf $register, $after-while";
+                            }
+                            when / until / {
+                                push @blocksic, "jt $register, $after-while";
+                            }
+                        }
                         my $block-name = $<block>.ast<name>;
                         $register = self.unique-register;
                         push @blocksic,

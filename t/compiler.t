@@ -31,6 +31,9 @@ my @programs-that-compile =
     'my $a; if $a {}',
     'if my $a {} else { say 42 }',
     'my $a; while $a { say $a }',
+    'unless 0 { say 42 }',
+    'my $a=0; unless $a { say $a }',
+    'my $a=0; until $a { say 42; ++$a; }',
 ;
 
 sub escape($string) { $string.subst("\n", "\\n", :g) }
@@ -61,8 +64,8 @@ my @programs-that-don't-compile =   # '
     'if $a {}',
     'if 42 { $a }',
     'if 5 {} else { $a }',
-    'unless 0 { say "unless" }',
-    'unless $a { say $a }'
+    'unless {} ',
+    'unless a {} ',
 ;
 
 for @programs-that-don't-compile -> $program { # '
