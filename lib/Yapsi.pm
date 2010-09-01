@@ -157,6 +157,7 @@ class Yapsi::Compiler {
         my @sic = "This is SIC v$VERSION";
         my $INDENT = '    ';
         my %package-variables;
+        my $*l = 0;         # unique label    counter
         traverse-top-down($/, :action(-> $m, $key {
             if $key eq 'TOP'|'block'|'else' {
                 push @sic, '';
@@ -167,7 +168,6 @@ class Yapsi::Compiler {
                 }
                 my @blocksic;
                 my $*c = 0; # unique register counter
-                my $*l = 0; # unique label    counter
                 my @skip = 'block', 'statement_control_if',
                            'statement_control_while_until',
                            'statement_control_unless';
