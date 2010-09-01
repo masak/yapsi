@@ -37,7 +37,7 @@ grammar Yapsi::Perl6::Grammar {
                   || <increment> }
     token variable { '$' \w+ }
     token literal { \d+ }
-    rule  declaration { 'my' <variable> }
+    rule  declaration { $<declarator>=['my'|'our'] <variable> }
     rule  assignment { <lvalue> '=' <expression> }
     rule  binding { <lvalue> ':=' <expression> }
     rule  saycall { 'say' <expression> }  # very temporary solution
@@ -120,7 +120,8 @@ class Yapsi::Perl6::Actions {
     my @vars;
     my &find-declarations = sub ($m, $key) {
         if $key eq "declaration" {
-            push @vars, ~$m<variable>;
+            push @vars, { :name(~$m<variable>),
+                          :our($m<declarator> eq 'our') };
         }
     };
 
@@ -155,18 +156,21 @@ class Yapsi::Compiler {
                         $program, :actions(Yapsi::Perl6::Actions));
         my @sic = "This is SIC v$VERSION";
         my $INDENT = '    ';
+        my %package-variables;
         traverse-top-down($/, :action(-> $m, $key {
             if $key eq 'TOP'|'block'|'else' {
                 push @sic, '';
                 push @sic, "block '$m.ast<name>':";
                 for $m.ast<vars>.list -> $var {
-                    push @sic, "    `var '$var'";
+                    push @sic, "    `var '$var<name>'"
+                               ~ ($var<our> ?? ' :our' !! '');
                 }
                 my @blocksic;
                 my $*c = 0; # unique register counter
                 my $*l = 0; # unique label    counter
                 my @skip = 'block', 'statement_control_if',
-                           'statement_control_while_until', 'statement_control_unless';
+                           'statement_control_while_until',
+                           'statement_control_unless';
                 my &sicify = -> $/, $key {
                     if $m !=== $/ && $key eq 'block' {
                         my $register = self.unique-register;
@@ -257,7 +261,7 @@ class Yapsi::Compiler {
                         while True {
                             my @vars = $current_block<vars>.list;
                             for ^@vars -> $i {
-                                if ~$/ eq @vars[$i] {
+                                if ~$/ eq @vars[$i]<name> {
                                     $slot = $i;
                                     # RAKUDO: Could use a 'last LOOP' here
                                     last;
@@ -316,6 +320,9 @@ class Yapsi::Compiler {
                         make [$register, '<constant>'];
                     }
                     elsif $key eq 'declaration' {
+                        if $<declarator> eq 'our' {
+                            ++%package-variables{~$<variable>};
+                        }
                         make $<variable>.ast;
                     }
                     elsif $key eq 'increment' {
@@ -348,6 +355,13 @@ class Yapsi::Compiler {
                 }
             }
         }));
+        if %package-variables {
+            push @sic, '';
+            push @sic, "block 'GLOBAL':";
+            for %package-variables.keys -> $var {
+                push @sic, "    `var '$var'";
+            }
+        }
         return @sic;
     }
 
@@ -430,22 +444,6 @@ class Closure {
     has Lexpad $.outer;
 }
 
-sub new-lexpad-from(@sic, $line is copy, Lexpad $outer?) {
-    my @vars;
-    # RAKUDO: Some Any()s seem to end up in the @sic array. Hence the
-    #         need for prefix:<~>. Would be interesting to learn where
-    #         this happens.
-    while ~@sic[++$line] ~~ / '    `' (\S*) \s+ \'(<-[']>+)\' / {
-        given $0 {
-            when "var" { push @vars, ~$1 }
-            default { die "Unknown directive $0"; }
-        }
-    }
-    return Lexpad.new(:slots(map { Container.new }, ^@vars),
-                      :names((hash @vars.kv).invert),
-                      :$outer);
-}
-
 sub find-block(@sic, $name) {
     for @sic.kv -> $n, $line {
         return $n
@@ -485,6 +483,35 @@ class Yapsi::Runtime {
             die "Went too far and ended up nowhere"
                 unless defined $lexpad;
             $lexpad;
+        }
+
+        my $global-lexpad;
+
+        sub new-lexpad-from(@sic, $line is copy, Lexpad $outer?) {
+            my (@vars, @slots);
+            # RAKUDO: Some Any()s seem to end up in the @sic array. Hence the
+            #         need for prefix:<~>. Would be interesting to learn where
+            #         this happens.
+            while ~@sic[++$line]
+                    ~~ / '    `' (\S*) :s \'(<-[']>+)\' ( ':'\w+)* / {
+                given $0 {
+                    when "var" {
+                        push @vars, ~$1;
+                        my $is-our-variable = ?( ':our' eq any $2>>.Str );
+                        my $container = $is-our-variable
+                            ?? (.slots[.names{~$1}] given $global-lexpad)
+                            !! Container.new;
+                        push @slots, $container;
+                    }
+                    default { die "Unknown directive $0"; }
+                }
+            }
+            return Lexpad.new(:@slots, :names((hash @vars.kv).invert), :$outer);
+        }
+
+        try {
+            $global-lexpad
+                = new-lexpad-from(@sic, find-block(@sic, 'GLOBAL'));
         }
 
         my $current-lexpad = new-lexpad-from(@sic, 2);
