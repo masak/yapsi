@@ -14,7 +14,7 @@ Rakudo Star 2010.08 and Rakudo Star 2010.07.
 Yapsi is an "official and complete" implementation of Perl 6. Yapsi's
 official status has been publicly confirmed by Patrick Michaud, the Rakudo
 pumking. The claim about Yapsi being complete... well, it might just be
-what PR people sometimes refer to as "a slight exaggeration". From the
+what PR people sometimes refer to as "a slight exaggeration". On the
 bright side, it's becoming less so with each new release.
 
 This month's release brings you 'unless' and 'until', as well as 'our'-scoped
@@ -34,7 +34,8 @@ For a complete list of changes, see doc/ChangeLog.
 Quite a lot of features are within reach of people who are interested in
 hacking on Yapsi. See the doc/LOLHALP file for a list of 'em. In fact,
 that's how isBEKaml++ implemented 'unless' this month. (After which he
-exclaimed "that was easy!" and tackled 'until'.)
+exclaimed "that was easy!" and tackled 'until'.) If you're wondering whether
+you're qualified to help with the Yapsi project, that probably means you are.
 
 Yapsi consists of a compiler and a runtime. The compiler generates instruction
 code which the runtime then interprets. In Yapsi, that instruction code
