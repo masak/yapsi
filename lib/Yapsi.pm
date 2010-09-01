@@ -4,8 +4,17 @@ my $VERSION = '2010.09';
 
 my $_PROGRAM; # RAKUDO: Part of workaround required because of [perl #76894]
 
+# At any given time, @blockstack contains the chain of blocks we're in,
+# from the outermost (the main program body), to the innermost. Each block
+# is stored as a hash, with the keys :name :vars, though :vars is only
+# filled in at the time of the action method at the end of the parsing of
+# the block.
+my @blockstack;
+
 grammar Yapsi::Perl6::Grammar {
-    regex TOP { ^ <statementlist> <.ws> $ }
+    regex TOP { ^
+                { push @blockstack, { :name(unique-block()) } }
+                <statementlist> <.ws> $ }
     regex statementlist { <statement> ** <eat_terminator> }
     token statement { <statement_control> || <expression> || '' }
     # RAKUDO: <?after '}'> NYRI [perl #76894]
@@ -34,7 +43,9 @@ grammar Yapsi::Perl6::Grammar {
     rule  saycall { 'say' <expression> }  # very temporary solution
     rule  increment { '++' <value> }
     rule  decrement { '--' <value> }
-    token block { <.ws> '{' <.ws> <statementlist> <.ws> '}' }
+    token block { <.ws> '{'
+                  { push @blockstack, { :name(unique-block()) } }
+                  <.ws> <statementlist> <.ws> '}' }
 }
 
 my $block-number = 0;   # Can be done with 'state' when Rakudo has it
@@ -72,29 +83,64 @@ sub traverse-bottom-up(Match $m, :$key = "TOP", :&action, :@skip) {
 my %block-parents;
 
 class Yapsi::Perl6::Actions {
+
+    # At any given time, %vars maps each 'active' (currently lexically visible)
+    # variables to the name of the block containing its outermost declaration.
+    my %vars;
+
+    # The reason we temporarily store 'declaration?' in %vars is that in a
+    # bottom-up model such as the one the actions employ, <variable> fires
+    # before <declaration>. Basically, there needs to be a way to say "this
+    # may be an undeclared variable, or maybe a variable that is being
+    # declared". The two possible cases of the former are caught in the
+    # .variable and .block methods.
+
+    method declaration($/) {
+        if %vars{~$<variable>} eq 'declaration?' {
+            %vars{~$<variable>} = @blockstack[*-1]<name>;
+        }
+    }
+
+    method variable($/) {
+        die qq[Variable "$/" used but not declared]
+            if %vars{~$/} eq 'declaration?';
+        unless %vars.exists(~$/) {
+            %vars{~$/} = 'declaration?';
+        }
+    }
+
+    method TOP($/) {
+        self.block($/);
+    }
+
+    # As opposed to %vars with its parse-global reach, @vars only has meaning
+    # within the .block method. It enumerates all of the variables declared
+    # directly in the current block. We need to clone the Array each time we
+    # store it, because we keep re-using the variable.
     my @vars;
     my &find-declarations = sub ($m, $key) {
         if $key eq "declaration" {
             push @vars, ~$m<variable>;
         }
     };
-    my &connect-blocks = sub ($name, $block, $m, $key) {
-        if $key eq "block" && $m.ast<name> ne $name {
-            %block-parents{$m.ast<name>} = $block;
-        }
-    };
-
-    method TOP($/) {
-        self.block($/);
-    }
 
     method block($/) {
         @vars = ();
         traverse-top-down($/, :skip['block'], :action(&find-declarations));
-        my $name = unique-block();
-        make my $block = { :$name, :vars(@vars.clone) };
-        traverse-top-down($/,
-                          :action(&connect-blocks.assuming($name, $block)));
+        my $block = pop @blockstack;
+        my $name = $block<name>;
+        $block<vars> = @vars.clone;
+        make $block;
+        if @blockstack {
+            %block-parents{$name} = @blockstack[*-1];
+        }
+        # RAKUDO: Can't assign to a hash when the hash is part of the rhs
+        #         [perl #77586]
+        my %workaround-vars = grep { .value ne $name }, %vars;
+        %vars = %workaround-vars;
+        if first { .value eq 'declaration?' }, %vars -> $p {
+            die qq[Variable "$p.key()" used but not declared];
+        }
     }
 }
 

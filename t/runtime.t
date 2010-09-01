@@ -41,6 +41,7 @@ my @tests =
 #   TODO -- Need to "instantiate" lexpads from some kind of "proto-lexpads"
 #    'my $a = 3; while --$a { say my $b; $b = 42 }', "Any()\nAny()\n",
 #                'each time a block is entered, it gets a fresh lexical pad',
+    'my $a = 42; { { say $a; } }',     "42\n",      'var lookup >1 block up',
 ;
 
 for @tests -> $program, $expected, $message {
