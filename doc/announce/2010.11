@@ -44,7 +44,7 @@ hacking on Yapsi. See the doc/LOLHALP file for a list of 'em.
 
 Yapsi consists of a compiler and a runtime. The compiler generates instruction
 code which the runtime then interprets. (If this sounds tricky, think of an
-assembly line where little toy soldier are building tiny toy-soldier-sized
+assembly line where little toy soldiers are constructing tiny toy-soldier-sized
 assembly lines, and so on all the way down to the scale of quantum foam. Now
 THAT's tricky!) The format used to represent the instructions in Yapsi are
 called SIC. Being of questionable merit from the beginning, SIC changes all
