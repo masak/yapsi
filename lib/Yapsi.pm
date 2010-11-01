@@ -464,6 +464,7 @@ subset Yapsi::IO where { .can('say') }
 
 class Yapsi::Runtime {
     has Yapsi::IO $!io = $*OUT;
+    has Lexpad $.current-lexpad;
 
     method run(@sic) {
         # RAKUDO: Need to use 'not' here rather than '!~~' [perl #76892]
@@ -514,7 +515,8 @@ class Yapsi::Runtime {
                 = new-lexpad-from(@sic, find-block(@sic, 'GLOBAL'));
         }
 
-        my $current-lexpad = new-lexpad-from(@sic, 2);
+        $!current-lexpad = new-lexpad-from(@sic, 2);
+        self.?tick;
         my $ip = 3;
         while @registers-stack {
             while @sic[$ip++] -> $line {
@@ -523,27 +525,29 @@ class Yapsi::Runtime {
                     when / ^ '$'(\d+) ' = ' (\d+) $ / { reg[+$0] = +$1 }
                     when / ^ 'store ['[(0)||'-'(\d+)]', '(\d+)'], $'(\d+) $ / {
                         my ($levels, $slot, $register) = +$0, +$1, +$2;
-                        my $lexpad = n-up-from($current-lexpad, $levels);
+                        my $lexpad = n-up-from($!current-lexpad, $levels);
                         $lexpad.slots[$slot].store(
                             Value.new( :payload(reg[$register]) )
                         );
+                        self.?tick;
                     }
                     when / ^ '$'(\d+)' = fetch '
                              '['[(0)||'-'(\d+)]', '(\d+)']' $ / {
                         my ($register, $levels, $slot) = +$0, +$1, +$2;
-                        my $lexpad = n-up-from($current-lexpad, $levels);
+                        my $lexpad = n-up-from($!current-lexpad, $levels);
                         reg[$register] = $lexpad.slots[$slot].payload();
                     }
                     when / ^ 'bind ['[(0)||'-'(\d+)]', '(\d+)'], '
                                   '['[(0)||'-'(\d+)]', '(\d+)']' $ / {
                         my ($var1-levels, $var1-slot) = +$0, +$1;
                         my $var1-lexpad
-                            = n-up-from($current-lexpad, $var1-levels);
+                            = n-up-from($!current-lexpad, $var1-levels);
                         my ($var2-levels, $var2-slot) = +$2, +$3;
                         my $var2-lexpad
-                            = n-up-from($current-lexpad, $var2-levels);
+                            = n-up-from($!current-lexpad, $var2-levels);
                         $var1-lexpad.slots[$var1-slot]
                             = $var2-lexpad.slots[$var2-slot];
+                        self.?tick;
                     }
                     when / ^ 'inc $'(\d+) $ / {
                         reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] + 1;
@@ -555,19 +559,22 @@ class Yapsi::Runtime {
                         if reg[+$0] == 0 {
                             $ip = find-label(@sic, ~$1);
                         }
+                        self.?tick;
                     }
                     when / ^ 'jt $'(\d+)', '(\S+) $ / {
                         if reg[+$0] != 0 {
                             $ip = find-label(@sic, ~$1);
                         }
+                        self.?tick;
                     }
                     when / ^ 'jmp '(\S+) $ / {
                         $ip = find-label(@sic, ~$0);
+                        self.?tick;
                     }
                     when / ^ '$'(\d+)' = closure-from-block '
                              \'(<-[']>+)\' $ / {
                         reg[+$0] = Closure.new(:block(~$1),
-                                               :outer($current-lexpad));
+                                               :outer($!current-lexpad));
                     }
                     when / ^ 'call $'(\d+) $ / {
                         die "Trying to call a non-closure"
@@ -575,12 +582,14 @@ class Yapsi::Runtime {
                         push @registers-stack, [];
                         push @ip-stack, $ip;
                         $ip = find-block(@sic, $closure.block);
-                        $current-lexpad
+                        $!current-lexpad
                             = new-lexpad-from(@sic, $ip, $closure.outer);
                         ++$ip;
+                        self.?tick;
                     }
                     when / ^ 'say $'(\d+) $ / {
                         $!io.say(reg[+$0]);
+                        self.?tick;
                     }
                     default {
                         die "Unknown instruction: ", $_;
@@ -589,7 +598,7 @@ class Yapsi::Runtime {
             }
             pop @registers-stack;
             $ip = pop @ip-stack;
-            $current-lexpad.=outer;
+            $!current-lexpad.=outer;
         }
     }
 }
