@@ -1,0 +1,66 @@
+It is with a contagious joviality that I announce on behalf of
+the Yapsi development team the October... hm... November 2010 release of
+Yapsi, a Perl 6 compiler written in Perl 6.
+
+You can download it here:
+
+ <http://github.com/downloads/masak/yapsi/yapsi-2010.11.tar.gz>
+
+Yapsi is implemented in Perl 6. It thus requires a Perl 6 implementation to
+build and run. This release of Yapsi has been confirmed to work on all
+releases of Rakudo Star to date.
+
+Yapsi is an "official and complete" implementation of Perl 6. The fact that
+it's official its author has claimed that it's official for over half a year
+now, and not once been contradicted. The fact that it's complete means that
+the code has the same volume (in cubic centimeters) as its packaging.
+
+This month's release brings you mostly bug fixes... BUT it also comes with
+compatibility for the long-awaited Tardis debugger (sold separately) which
+allows ordinary mortals to jump backwards in time!
+
+$ export PERL6LIB=path/to/yapsi/lib:path/to/tardis/lib
+
+$ bin/tardis -e 'my $a = 42; my $b; { $b = 5 }'
+# Compiling...
+# Running...
+# Finished. Ticks: 0..3
+> go 1
+$a = 42
+$b = Any()
+> go 3
+$a = 42
+$b = 5
+> go 1
+$a = 42
+$b = Any()
+> ^C
+
+For a complete list of changes, see doc/ChangeLog.
+
+Quite a lot of features are within reach of people who are interested in
+hacking on Yapsi. See the doc/LOLHALP file for a list of 'em.
+
+Yapsi consists of a compiler and a runtime. The compiler generates instruction
+code which the runtime then interprets. (If this sounds tricky, think of an
+assembly line where little toy soldier are building tiny toy-soldier-sized
+assembly lines, and so on all the way down to the scale of quantum foam. Now
+THAT's tricky!) The format used to represent the instructions in Yapsi are
+called SIC. Being of questionable merit from the beginning, SIC changes all
+the time, except for the property that it changes all the time, which has
+tended to be quite predictable. Even that, however, may change over time.
+Anyway, don't expect the SIC of next month to look anything like the SIC of
+this month. It might, but don't expect it.
+
+An overarching goal for making a Perl 6 compiler-and-runtime is to use it as
+a server for various other projects, which hook in at different steps:
+
+* A time-traveling debugger (tardis), which hooks into the runtime.
+  Already underway, see <http://github.com/masak/tardis>
+* A coverage tool (lid), which will also hook into the runtime.
+* A syntax checker (sigmund), which will use output from the parser.
+
+Another overarching goal is to optimize for fun while learning about parsers,
+compilers, and runtimes. So far that goal is on track, and more.
+
+Have the appropriate amount of fun!
