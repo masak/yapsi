@@ -11,8 +11,9 @@ build and run. This release of Yapsi has been confirmed to work on all
 releases of Rakudo Star to date.
 
 Yapsi is an "official and complete" implementation of Perl 6. The fact that
-it's official its author has claimed that it's official for over half a year
-now, and not once been contradicted. The fact that it's complete means that
+it's official means that its author has claimed that it's official for over
+half a year now, and not once been contradicted. Hence, it must be so.
+The fact that it's complete means that
 the code has the same volume (in cubic centimeters) as its packaging.
 
 This month's release brings you mostly bug fixes... BUT it also comes with
