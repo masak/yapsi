@@ -1,6 +1,6 @@
 use v6;
 
-my $VERSION = '2010.11';
+my $VERSION = '2010.12';
 
 my $_PROGRAM; # RAKUDO: Part of workaround required because of [perl #76894]
 
