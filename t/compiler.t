@@ -35,6 +35,8 @@ my @programs-that-compile =
     'my $a=0; unless $a { say $a }',
     'my $a=0; until $a { say 42; ++$a; }',
     'our $a',
+    'my $a; $a()',
+    '{ say 42 }()',
 ;
 
 sub escape($string) { $string.subst("\n", "\\n", :g) }

@@ -23,7 +23,7 @@ grammar Yapsi::Perl6::Grammar {
                            }> \n
                            || <.ws> ';' }
     token expression { <assignment> || <binding> || <variable> || <literal>
-                       || <declaration> || <block>
+                       || <declaration> || <invocation> || <block>
                        || <saycall> || <increment> || <decrement> }
     token statement_control { <statement_control_if>
                               || <statement_control_while_until> 
@@ -43,6 +43,7 @@ grammar Yapsi::Perl6::Grammar {
     rule  saycall { 'say' <expression> }  # very temporary solution
     rule  increment { '++' <value> }
     rule  decrement { '--' <value> }
+    rule  invocation { [<variable>||<block>]'()' }
     token block { <.ws> '{'
                   { push @blockstack, { :name(unique-block()) } }
                   <.ws> <statementlist> <.ws> '}' }
@@ -355,6 +356,11 @@ class Yapsi::Compiler {
                         push @blocksic, "dec $register",
                                         "store $locator, $register";
                         make [$register, $locator];
+                    }
+                    elsif $key eq 'invocation' {
+                        my ($register) = $<variable> ?? $<variable>.ast.list
+                                                     !! $<block>.ast<register>;
+                        push @blocksic, "call $register";
                     }
                     elsif $key eq 'saycall' {
                         my ($register, $) = $<expression>.ast.list;
