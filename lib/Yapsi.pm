@@ -143,6 +143,13 @@ class Yapsi::Perl6::Actions {
             die qq[Variable "$p.key()" used but not declared];
         }
     }
+
+    method statement($/) {
+        if $<expression> && $<expression><block> -> $e {
+            my $block = $e.ast;
+            $block<immediate> = "yes";
+        }
+    }
 }
 
 class Yapsi::Compiler {
@@ -176,8 +183,13 @@ class Yapsi::Compiler {
                         my $register = self.unique-register;
                         my $block-name = $/.ast<name>;
                         push @blocksic,
-                            "$register = closure-from-block '$block-name'",
-                            "call $register";
+                            "$register = closure-from-block '$block-name'";
+                        if $/.ast<immediate> {
+                            push @blocksic, "call $register";
+                        }
+                        else {
+                            $/.ast<register> = $register;
+                        }
                     }
                     elsif $key eq 'statement_control_if' {
                         traverse-bottom-up(
@@ -311,6 +323,9 @@ class Yapsi::Compiler {
                             if $/{$e} {
                                 make $/{$e}.ast;
                             }
+                        }
+                        if $<block> {
+                            make $<block>.ast<register>;
                         }
                     }
                     elsif $key eq 'literal' {

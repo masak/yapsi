@@ -47,6 +47,7 @@ my @tests =
                                        "5\n",       'our lookup',
     'my $a = 0; my $b = 0; until $a { if $b { $a = 1 }; say ++$b }',
                                        "1\n2\n",    'nested jumps in SIC',
+    'my $a = { say 42 }',              "",          'non-immediate block',
 ;
 
 for @tests -> $program, $expected, $message {
