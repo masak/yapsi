@@ -1,3 +1,8 @@
+New in 2010.12 release
++ non-immediate blocks
++ calling blocks and variables
++ various binding improvements
+
 New in 2010.11 release
 + Tardis compatibility
 
