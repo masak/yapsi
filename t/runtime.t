@@ -49,6 +49,7 @@ my @tests =
     'my $a = 0; my $b = 0; until $a { if $b { $a = 1 }; say ++$b }',
                                        "1\n2\n",    'nested jumps in SIC',
     'my $a = { say 42 }; say 1; $a()', "1\n42\n",   'non-immediate block',
+    'my $a := { say 2 }; say 1; $a()', "1\n2\n",    'bind block and call',
     '{ say 42 }()',                    "42\n",      'call a block',
 ;
 

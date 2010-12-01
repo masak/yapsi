@@ -292,15 +292,23 @@ class Yapsi::Compiler {
                         make [$register, $locator];
                     }
                     elsif $key eq 'assignment' {
-                        my ($register, $) = $<expression>.ast.list;
                         my ($, $locator) = $<lvalue>.ast.list;
+                        my ($register, $) = $<expression>.ast.list;
                         push @blocksic, "store $locator, $register";
                         make [$register, $locator];
                     }
                     elsif $key eq 'binding' {
                         my ($, $leftloc) = $<lvalue>.ast.list;
                         my ($register, $rightloc) = $<expression>.ast.list;
-                        push @blocksic, "bind $leftloc, $rightloc";
+                        # XXX: This latter test is for catching bindings to
+                        #      blocks. The test is not very robust, but it
+                        #      works for the time being.
+                        if $rightloc eq '<constant>' || !defined $rightloc {
+                            push @blocksic, "bind $leftloc, $register";
+                        }
+                        else {
+                            push @blocksic, "bind $leftloc, $rightloc";
+                        }
                         make [$register, $leftloc];
                     }
                     elsif $key eq 'value' {
@@ -333,7 +341,7 @@ class Yapsi::Compiler {
                         my $register = self.unique-register;
                         my $literal = ~$/;
                         push @blocksic, "$register = $literal";
-                        make [$register, $literal];
+                        make [$register, '<constant>'];
                     }
                     elsif $key eq 'declaration' {
                         if $<declarator> eq 'our' {
@@ -570,10 +578,11 @@ class Yapsi::Runtime {
                             = $var2-lexpad.slots[$var2-slot];
                         self.?tick;
                     }
-                    when / ^ 'bind ['[(0)||'-'(\d+)]', '(\d+)'], '(\d+) $ / {
-                        my ($levels, $slot, $literal) = +$0, +$1, +$2;
+                    when / ^ 'bind ['[(0)||'-'(\d+)]', '(\d+)'], $'(\d+) $ / {
+                        my ($levels, $slot, $register) = +$0, +$1, +$2;
                         my $lexpad = n-up-from($!current-lexpad, $levels);
-                        $lexpad.slots[$slot] = Value.new( :payload($literal) );
+                        $lexpad.slots[$slot]
+                            = Value.new( :payload(reg[$register]) );
                         self.?tick;
                     }
                     when / ^ 'inc $'(\d+) $ / {
