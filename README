@@ -6,6 +6,9 @@ This is an implementation of a Perl 6 compiler-and-runtime in Perl 6.
 
 $ ufo && make
 
+'ufo' is a Makefile generator, and can be found at
+<http://github.com/masak/ufo>.
+
 == Features currently available in Yapsi
 
 Right now you can do things like this:
@@ -13,7 +16,7 @@ Right now you can do things like this:
 $ bin/yapsi -e 'say 42'
 42
 
-$ bin/yapsi -e 'my $a; { $a = 5 }; say $a'
+$ bin/yapsi -e 'my $a; my $b = { $a = 5 }; $b(); say $a'
 5
 
 $ bin/yapsi -e 'my $a = 5; my $b := $a; $b = 41; ++$b; say $a'
@@ -21,7 +24,7 @@ $ bin/yapsi -e 'my $a = 5; my $b := $a; $b = 41; ++$b; say $a'
 
 $ bin/yapsi -e 'my $a = 42; while --$a { say $a }'
 
-In other words, Yapsi currently handles declaration, immediate blocks,
+In other words, Yapsi currently handles scalar variables, declaration, blocks,
 assignment, binding, prefix increment/decrement, if/while, and say.
 
 The compiler also detects syntax errors.
