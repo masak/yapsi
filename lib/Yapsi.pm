@@ -333,7 +333,7 @@ class Yapsi::Compiler {
                         my $register = self.unique-register;
                         my $literal = ~$/;
                         push @blocksic, "$register = $literal";
-                        make [$register, '<constant>'];
+                        make [$register, $literal];
                     }
                     elsif $key eq 'declaration' {
                         if $<declarator> eq 'our' {
@@ -568,6 +568,12 @@ class Yapsi::Runtime {
                             = n-up-from($!current-lexpad, $var2-levels);
                         $var1-lexpad.slots[$var1-slot]
                             = $var2-lexpad.slots[$var2-slot];
+                        self.?tick;
+                    }
+                    when / ^ 'bind ['[(0)||'-'(\d+)]', '(\d+)'], '(\d+) $ / {
+                        my ($levels, $slot, $literal) = +$0, +$1, +$2;
+                        my $lexpad = n-up-from($!current-lexpad, $levels);
+                        $lexpad.slots[$slot] = Value.new( :payload($literal) );
                         self.?tick;
                     }
                     when / ^ 'inc $'(\d+) $ / {

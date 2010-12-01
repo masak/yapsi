@@ -17,6 +17,7 @@ my @tests =
     'my $a = 42; say $a',              "42\n",      'variables',
     'my $a = 5; my $b = $a; say $b',   "5\n",       'assignment',
     'my $b := my $a; $a = 7; say $b',  "7\n",       'binding',
+    'my $a := 42; say $a',             "42\n",      'bind a literal',
     'say my $a',                       "Any()\n",   'uninitialized',
     'say say 42',                      "42\n1\n",   'return value of say',
     'my $a = 42; my $a; say $a',       "42\n",      'same scope, same var',
