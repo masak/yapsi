@@ -40,6 +40,8 @@ Things we hope to implement in the immediate future:
 * Function calls
 * Phasers
 
+For more detailed information, see doc/ROADMAP.
+
 == Raison d'être
 
 Besides being useful as a p6-in-p6 implementation, Yapsi also might work as
