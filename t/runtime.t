@@ -60,4 +60,4 @@ for @tests -> $program, $expected, $message {
     is $out, $expected, $message;
 }
 
-done_testing;
+done;

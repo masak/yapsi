@@ -80,4 +80,4 @@ for @programs-that-don't-compile -> $program { # '
     ok !$can-compile, "will not compile '$program'";
 }
 
-done_testing;
+done;
