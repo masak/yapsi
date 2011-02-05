@@ -1,3 +1,7 @@
+New in 2011.02 release
++ FUTURE refactor
++ a --target=FUTURE option for bin/yapsi
+
 New in 2011.01 release
 + a roadmap
 
