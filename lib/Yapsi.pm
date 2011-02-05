@@ -108,6 +108,8 @@ class FUTURE::Var   is FUTURE::Node {
 
 class FUTURE::Val   is FUTURE::Node {
     has $.value;
+
+    method info { " -- $.value()" }
 }
 
 class FUTURE::Op    is FUTURE::Node {}
