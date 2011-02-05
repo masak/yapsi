@@ -6,15 +6,25 @@ my $_PROGRAM; # RAKUDO: Part of workaround required because of [perl #76894]
 
 # At any given time, @blockstack contains the chain of blocks we're in,
 # from the outermost (the main program body), to the innermost. Each block
-# is stored as a hash, with the keys :name :vars, though :vars is only
-# filled in at the time of the action method at the end of the parsing of
+# is stored as a FUTURE::Block, with the keys :name :vars, though :vars is
+# only filled in at the time of the action method at the end of the parsing of
 # the block.
 my @blockstack;
 
+class FUTURE::Block { ... }
+
+my %block-parents;
+
 grammar Yapsi::Perl6::Grammar {
     regex TOP { ^
-                { push @blockstack, { :name(unique-block()) } }
+                { %block-parents = ();
+                  push @blockstack,
+                       FUTURE::Block.new( :name(unique-block()) ) }
                 <statementlist> <.ws> $ }
+    token block { <.ws> '{'
+                  { push @blockstack,
+                         FUTURE::Block.new( :name(unique-block()) ) }
+                  <.ws> <statementlist> <.ws> '}' }
     regex statementlist { <statement> ** <eat_terminator> }
     token statement { <statement_control> || <expression> || '' }
     # RAKUDO: <?after '}'> NYRI [perl #76894]
@@ -22,37 +32,98 @@ grammar Yapsi::Perl6::Grammar {
                                && $_PROGRAM.substr($/.CURSOR.pos - 1, 1) eq '}'
                            }> \n
                            || <.ws> ';' }
+    token statement_control { <statement_control_if>
+                              || <statement_control_unless>
+                              || <statement_control_while>
+                              || <statement_control_until> }
+    rule  statement_control_if { 'if' <expression> <block>
+                                 [ 'else' <else=.block> ]? }
+    rule  statement_control_unless { 'unless' <expression> <block> }
+    rule  statement_control_while { 'while' <expression> <block> }
+    rule  statement_control_until { 'until' <expression> <block> }
+
     token expression { <assignment> || <binding> || <variable> || <literal>
                        || <declaration> || <invocation> || <block>
                        || <saycall> || <increment> || <decrement> }
-    token statement_control { <statement_control_if>
-                              || <statement_control_while_until> 
-                              || <statement_control_unless> }
-    rule  statement_control_if { 'if' <expression> <block>
-                                 [ 'else' <else=.block> ]? }
-    rule  statement_control_while_until { $<keyword>=[ 'while' | 'until' ] <expression> <block> }
-    rule statement_control_unless { 'unless' <expression> <block> }
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
                   || <increment> }
+    rule  declaration { $<declarator>=['my'|'our'] <variable> }
+
     token variable { '$' \w+ }
     token literal { \d+ }
-    rule  declaration { $<declarator>=['my'|'our'] <variable> }
     rule  assignment { <lvalue> '=' <expression> }
     rule  binding { <lvalue> ':=' <expression> }
     rule  saycall { 'say' <expression> }  # very temporary solution
     rule  increment { '++' <value> }
     rule  decrement { '--' <value> }
     rule  invocation { [<variable>||<block>]'()' }
-    token block { <.ws> '{'
-                  { push @blockstack, { :name(unique-block()) } }
-                  <.ws> <statementlist> <.ws> '}' }
 }
 
 my $block-number = 0;   # Can be done with 'state' when Rakudo has it
 sub unique-block() {
     'B' ~ $block-number++;
 }
+
+class FUTURE::Node {
+    has FUTURE::Node @.children is rw;
+
+    method push(*@nodes) {
+        @!children.push(|@nodes);
+        return self;
+    }
+
+    method at_pos($index) {
+        return @!children.at_pos($index);
+    }
+
+    method DEBUG() {
+        sub helper($node, $index) {
+            take [~] '  ' x $index,
+                     $node.WHAT.perl.subst(/^ .*? '::'/, ''),
+                     $node.?info;
+            helper($_, $index + 1) for $node.?children;
+        }
+
+        return gather {
+            helper(self, 0);
+        }
+    }
+}
+
+class FUTURE::Block is FUTURE::Node {
+    has $.name;
+    has @.vars is rw;
+    has $.immediate is rw;
+
+    method info { [~] ' -- ', $.name,
+                      (' [', @.vars»<name>.join(', '), ']' if @.vars) }
+}
+
+class FUTURE::Var   is FUTURE::Node {
+    has $.name;
+
+    method info { " -- $.name()" }
+}
+
+class FUTURE::Val   is FUTURE::Node {
+    has $.value;
+}
+
+class FUTURE::Op    is FUTURE::Node {}
+
+class FUTURE::Call  is FUTURE::Op {
+    has $.name;
+
+    method info { " -- $.name()" }
+}
+
+class FUTURE::Assign is FUTURE::Op {}
+class FUTURE::Bind   is FUTURE::Op {}
+class FUTURE::If     is FUTURE::Op {}
+class FUTURE::Unless is FUTURE::Op {}
+class FUTURE::While  is FUTURE::Op {}
+class FUTURE::Until  is FUTURE::Op {}
 
 sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
     action($m, $key);
@@ -67,47 +138,12 @@ sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
     }
 }
 
-sub traverse-bottom-up(Match $m, :$key = "TOP", :&action, :@skip) {
-    unless $key eq any @skip {
-        for %($m).keys -> $key {
-            given $m{$key} {
-                when Match { traverse-bottom-up($_, :$key, :&action, :@skip) }
-                when Array { traverse-bottom-up($_, :$key, :&action, :@skip)
-                                for .list }
-                default { die "Unknown thing $_.WHAT() in parse tree!" }
-            }
-        }
-    }
-    action($m, $key);
-}
-
-my %block-parents;
-
 class Yapsi::Perl6::Actions {
 
-    # At any given time, %vars maps each 'active' (currently lexically visible)
-    # variables to the name of the block containing its outermost declaration.
-    my %vars;
-
-    # The reason we temporarily store 'declaration?' in %vars is that in a
-    # bottom-up model such as the one the actions employ, <variable> fires
-    # before <declaration>. Basically, there needs to be a way to say "this
-    # may be an undeclared variable, or maybe a variable that is being
-    # declared". The two possible cases of the former are caught in the
-    # .variable and .block methods.
-
-    method declaration($/) {
-        if %vars{~$<variable>} eq 'declaration?' {
-            %vars{~$<variable>} = @blockstack[*-1]<name>;
-        }
-    }
-
-    method variable($/) {
-        die qq[Variable "$/" used but not declared]
-            if %vars{~$/} eq 'declaration?';
-        unless %vars.exists(~$/) {
-            %vars{~$/} = 'declaration?';
-        }
+    sub hoist($/, @subnodes) {
+        # RAKUDO: Can't write this with block-style 'for' loop [perl #83420]
+        (make $/{$_}.ast if $/{$_} for @subnodes)
+            or die "Couldn't hoist $/.keys.join(' '), not among @subnodes[]";
     }
 
     method TOP($/) {
@@ -129,9 +165,11 @@ class Yapsi::Perl6::Actions {
     method block($/) {
         @vars = ();
         traverse-top-down($/, :skip['block'], :action(&find-declarations));
-        my $block = pop @blockstack;
-        my $name = $block<name>;
-        $block<vars> = @vars.clone;
+        # Replace the pretender Block on the stack with a real one
+        my $block = @blockstack.pop;
+        my $name = $block.name;
+        $block.vars = @vars.list;
+        $block.children = $<statementlist><statement>».ast;
         make $block;
         if @blockstack {
             %block-parents{$name} = @blockstack[*-1];
@@ -148,13 +186,131 @@ class Yapsi::Perl6::Actions {
     method statement($/) {
         if $<expression> && $<expression><block> -> $e {
             my $block = $e.ast;
-            $block<immediate> = "yes";
+            $block.immediate = True;
         }
+
+        if $<expression> {
+            make $<expression>.ast;
+        }
+        elsif $<statement_control> {
+            make $<statement_control>.ast;
+        }
+        else { # the '' case
+            make FUTURE::Val.new(:value("Any"));    # we don't have Nil yet
+        }
+    }
+
+    method statement_control($/) {
+        hoist $/, <statement_control_if statement_control_unless
+                   statement_control_while statement_control_until>;
+    }
+
+    method statement_control_if($/) {
+        make FUTURE::If.new(:children($<expression>.ast,
+                                      $<block>.ast,
+                                      $<else>[0].?ast));
+    }
+
+    method statement_control_unless($/) {
+        make FUTURE::Unless.new(:children($<expression>.ast,
+                                          $<block>.ast));
+    }
+
+    method statement_control_while($/) {
+        make FUTURE::While.new(:children($<expression>.ast,
+                                         $<block>.ast));
+    }
+
+    method statement_control_until($/) {
+        make FUTURE::Until.new(:children($<expression>.ast,
+                                         $<block>.ast));
+    }
+
+    method expression($/) {
+        hoist $/, <assignment literal saycall variable declaration binding
+                   increment decrement invocation block>;
+    }
+
+    method lvalue($/) {
+        hoist $/, <declaration variable increment decrement>;
+    }
+
+    method value($/) {
+        hoist $/, <variable declaration>;
+    }
+
+    # At any given time, %vars maps each 'active' (currently lexically visible)
+    # variable to the name of the block containing its outermost declaration.
+    my %vars;
+
+    # The reason we temporarily store 'declaration?' in %vars is that in a
+    # bottom-up model such as the one the actions employ, <variable> fires
+    # before <declaration>. Basically, there needs to be a way to say "this
+    # may be an undeclared variable, or maybe a variable that is being
+    # declared". The two possible cases of the former are caught in the
+    # .variable and .block methods.
+
+    method declaration($/) {
+        if %vars{~$<variable>} eq 'declaration?' {
+            %vars{~$<variable>} = @blockstack[*-1].name;
+        }
+
+        make $<variable>.ast;
+    }
+
+    method variable($/) {
+        die qq[Variable "$/" used but not declared]
+            if %vars{~$/} eq 'declaration?';
+        unless %vars.exists(~$/) {
+            %vars{~$/} = 'declaration?';
+        }
+
+        make FUTURE::Var.new(:name(~$/));
+    }
+
+    method literal($/) {
+        make FUTURE::Val.new(:value(~$/));
+    }
+
+    method assignment($/) {
+        make FUTURE::Assign.new(:children($<lvalue>.ast, $<expression>.ast));
+    }
+
+    method binding($/) {
+        make FUTURE::Bind.new(:children($<lvalue>.ast, $<expression>.ast));
+    }
+
+    method saycall($/) {
+        make FUTURE::Call.new(:name('&say'), :children($<expression>.ast));
+    }
+
+    method increment($/) {
+        make FUTURE::Call.new(:name('&prefix:<++>'), :children($<value>.ast));
+    }
+
+    method decrement($/) {
+        make FUTURE::Call.new(:name('&prefix:<-->'), :children($<value>.ast));
+    }
+
+    method invocation($/) {
+        make FUTURE::Call.new(
+            :name('&postcircumfix:<( )>'),
+            :children($<variable> ?? $<variable>.ast !! $<block>.ast)
+        );
     }
 }
 
 class Yapsi::Compiler {
     has @.warnings;
+
+    method to-future($program) {
+        @!warnings = ();
+        $_PROGRAM = $program; # RAKUDO: Required because of [perl #76894]
+        die "Could not parse"
+            unless Yapsi::Perl6::Grammar.parse(
+                        $program, :actions(Yapsi::Perl6::Actions));
+        return $/.ast.DEBUG;
+    }
 
     method compile($program) {
         @!warnings = ();
@@ -165,225 +321,32 @@ class Yapsi::Compiler {
         my @sic = "This is SIC v$VERSION";
         my $INDENT = '    ';
         my %package-variables;
-        my $*l = 0;         # unique label    counter
-        traverse-top-down($/, :action(-> $m, $key {
-            if $key eq 'TOP'|'block'|'else' {
-                push @sic, '';
-                push @sic, "block '$m.ast<name>':";
-                for $m.ast<vars>.list -> $var {
-                    push @sic, "    `var '$var<name>'"
-                               ~ ($var<our> ?? ' :our' !! '');
-                }
-                my @blocksic;
-                my $*c = 0; # unique register counter
-                my @skip = 'block', 'statement_control_if',
-                           'statement_control_while_until',
-                           'statement_control_unless';
-                my &sicify = -> $/, $key {
-                    if $m !=== $/ && $key eq 'block' {
-                        my $register = self.unique-register;
-                        my $block-name = $/.ast<name>;
-                        push @blocksic,
-                            "$register = closure-from-block '$block-name'";
-                        if $/.ast<immediate> {
-                            push @blocksic, "call $register";
-                        }
-                        else {
-                            $/.ast<register> = $register;
-                        }
-                    }
-                    elsif $key eq 'statement_control_if' {
-                        traverse-bottom-up(
-                            $<expression>,
-                            :key<expression>,
-                            :@skip,
-                            :action(&sicify)
-                        );
-                        my ($register, $) = $<expression>.ast.list;
-                        my $block-name = $<block>.ast<name>;
-                        my $after-if = self.unique-label;
-                        push @blocksic, "jf $register, $after-if";
-                        $register = self.unique-register;
-                        push @blocksic,
-                            "$register = closure-from-block '$block-name'",
-                            "call $register";
-                        my $after-else;
-                        if $<else> {
-                            $after-else = self.unique-label;
-                            push @blocksic, "jmp $after-else";
-                        }
-                        push @blocksic, "`label $after-if";
-                        if $<else> {
-                            $block-name = $<else>[0].ast<name>;
-                            $register = self.unique-register;
-                            push @blocksic,
-                                "$register = closure-from-block '$block-name'",
-                                "call $register",
-                                "`label $after-else";
-                        }
-                    }
-                    elsif $key eq 'statement_control_unless' {
-                        traverse-bottom-up(
-                            $<expression>,
-                            :key<expression>,
-                            :@skip,
-                            :action(&sicify)
-                        );
-                        my ($register, $) = $<expression>.ast.list;
-                        my $block-name = $<block>.ast<name>;
-                        my $after-unless = self.unique-label;
-                        push @blocksic, "jt $register, $after-unless";
-                        $register = self.unique-register;
-                        push @blocksic,
-                            "$register = closure-from-block '$block-name'",
-                            "call $register";
-                        push @blocksic, "`label $after-unless";
-                    }
-                    elsif $key eq 'statement_control_while_until' {
-                        my $before-while = self.unique-label;
-                        my $after-while = self.unique-label;
-                        push @blocksic, "`label $before-while";
-                        traverse-bottom-up(
-                            $<expression>,
-                            :key<expression>,
-                            :@skip,
-                            :action(&sicify)
-                        );
-                        my ($register, $) = $<expression>.ast.list;
-                        given $<keyword> {
-                            when / while / {
-                                push @blocksic, "jf $register, $after-while";
-                            }
-                            when / until / {
-                                push @blocksic, "jt $register, $after-while";
-                            }
-                        }
-                        my $block-name = $<block>.ast<name>;
-                        $register = self.unique-register;
-                        push @blocksic,
-                            "$register = closure-from-block '$block-name'",
-                            "call $register",
-                            "jmp $before-while",
-                            "`label $after-while";
-                    }
-                    elsif $key eq 'variable' {
-                        my $register = self.unique-register;
-                        my $current_block = $m.ast;
-                        my $level = 0;
-                        my $slot = -1;
-                        while True {
-                            my @vars = $current_block<vars>.list;
-                            for ^@vars -> $i {
-                                if ~$/ eq @vars[$i]<name> {
-                                    $slot = $i;
-                                    # RAKUDO: Could use a 'last LOOP' here
-                                    last;
-                                }
-                            }
-                            last if $slot != -1;
-                            --$level;
-                            $current_block
-                                = %block-parents{$current_block<name>};
-                            die "Variable '$/' not declared"
-                                unless defined $current_block;
-                        }
-                        my $locator = "[$level, $slot]";
-                        push @blocksic, "$register = fetch $locator";
-                        make [$register, $locator];
-                    }
-                    elsif $key eq 'assignment' {
-                        my ($, $locator) = $<lvalue>.ast.list;
-                        my ($register, $) = $<expression>.ast.list;
-                        push @blocksic, "store $locator, $register";
-                        make [$register, $locator];
-                    }
-                    elsif $key eq 'binding' {
-                        my ($, $leftloc) = $<lvalue>.ast.list;
-                        my ($register, $rightloc) = $<expression>.ast.list;
-                        # XXX: This latter test is for catching bindings to
-                        #      blocks. The test is not very robust, but it
-                        #      works for the time being.
-                        if $rightloc eq '<constant>' || !defined $rightloc {
-                            push @blocksic, "bind $leftloc, $register";
-                        }
-                        else {
-                            push @blocksic, "bind $leftloc, $rightloc";
-                        }
-                        make [$register, $leftloc];
-                    }
-                    elsif $key eq 'value' {
-                        for <variable literal declaration saycall
-                             increment decrement> -> $e {
-                            if $/{$e} {
-                                make $/{$e}.ast;
-                            }
-                        }
-                    }
-                    elsif $key eq 'lvalue' {
-                        for <variable declaration increment decrement> -> $e {
-                            if $/{$e} {
-                                make $/{$e}.ast;
-                            }
-                        }
-                    }
-                    elsif $key eq 'expression' {
-                        for <variable literal declaration assignment binding
-                             saycall increment decrement> -> $e {
-                            if $/{$e} {
-                                make $/{$e}.ast;
-                            }
-                        }
-                        if $<block> {
-                            make $<block>.ast<register>;
-                        }
-                    }
-                    elsif $key eq 'literal' {
-                        my $register = self.unique-register;
-                        my $literal = ~$/;
-                        push @blocksic, "$register = $literal";
-                        make [$register, '<constant>'];
-                    }
-                    elsif $key eq 'declaration' {
-                        if $<declarator> eq 'our' {
-                            ++%package-variables{~$<variable>};
-                        }
-                        make $<variable>.ast;
-                    }
-                    elsif $key eq 'increment' {
-                        my ($register, $locator) = $<value>.ast.list;
-                        die "Can't increment a constant"
-                            if $locator eq '<constant>';
-                        push @blocksic, "inc $register",
-                                        "store $locator, $register";
-                        make [$register, $locator];
-                    }
-                    elsif $key eq 'decrement' {
-                        my ($register, $locator) = $<value>.ast.list;
-                        die "Can't increment a constant"
-                            if $locator eq '<constant>';
-                        push @blocksic, "dec $register",
-                                        "store $locator, $register";
-                        make [$register, $locator];
-                    }
-                    elsif $key eq 'invocation' {
-                        my ($register) = $<variable> ?? $<variable>.ast.list
-                                                     !! $<block>.ast<register>;
-                        push @blocksic, "call $register";
-                    }
-                    elsif $key eq 'saycall' {
-                        my ($register, $) = $<expression>.ast.list;
-                        my $result = self.unique-register;
-                        push @blocksic, "say $register",
-                                        "$result = 1";
-                        make $result;
-                    }
-                };
-                traverse-bottom-up($m, :@skip, :action(&sicify));
-                for renumber declutter @blocksic {
-                    push @sic, $INDENT ~ $_;
-                }
-            }
-        }));
+
+        my @blocksic;
+
+        my $l = 0;
+        sub unique-label {
+            return 'L' ~ $l++;
+        }
+
+        my $r = 0;
+        sub unique-register {
+            return '$' ~ $r++;
+        }
+
+        my $locator;
+        my $register;
+
+        my @blocks-to-serialize = $/.ast;
+        my @already-serialized;
+
+        while @blocks-to-serialize > @already-serialized {
+            my $block = first { $_ ne any(@already-serialized) },
+                              @blocks-to-serialize;
+            serialize $block;
+            push @already-serialized, $block;
+        }
+
         if %package-variables {
             push @sic, '';
             push @sic, "block 'GLOBAL':";
@@ -391,56 +354,234 @@ class Yapsi::Compiler {
                 push @sic, "    `var '$var'";
             }
         }
+
         return @sic;
-    }
 
-    method unique-register {
-        return '$' ~ $*c++;
-    }
-
-    method unique-label {
-        return 'L' ~ $*l++;
-    }
-
-    sub declutter(@instructions) {
-        my @decluttered;
-        for @instructions.kv -> $i, $line {
-            # RAKUDO: !~~ doesn't bind $/
-            if not $line ~~ / ^ ('$' \d+) ' =' / {
-                push @decluttered, $line;
-            }
-            else {
-                my $varname = ~$0;
-                my Bool $usages-later = False;
-                for $i+1 ..^ +@instructions -> $j {
-                    # XXX: This heuristic fails when we reach many-digit
-                    #      reguster names, since it gives false positives
-                    #      for all prefixes
-                    ++$usages-later
-                        if defined index(@instructions[$j], $varname);
+        sub serialize(FUTURE::Block $block) {
+            push @sic, '';
+            push @sic, "block '$block.name()':";
+            for $block.vars.list -> $var {
+                push @sic, "    `var '$var<name>'"
+                           ~ ($var<our> ?? ' :our' !! '');
+                if $var<our> {
+                    ++%package-variables{$var<name>};
                 }
-                if $usages-later {
-                    push @decluttered, $line;
+            }
+
+            @blocksic = ();
+            my $*current_block = $block;
+            for $block.children -> $statement {
+                process $statement;
+            }
+            for renumber declutter @blocksic {
+                push @sic, $INDENT ~ $_;
+            }
+        }
+
+        multi process(FUTURE::Call $call) {
+            process $call.children[0]; # a FUTURE::Expression
+
+            given $call.name {
+                when '&say' {
+                    my $result-register = unique-register;
+                    push @blocksic, "say $register",
+                                    "$result-register = 1";
+                    $register = $result-register;
+                }
+                when '&prefix:<++>' {
+                    die "Can't increment a constant"
+                        if $locator eq '<constant>';
+                    push @blocksic, "inc $register",
+                                    "store $locator, $register";
+                }
+                when '&prefix:<-->' {
+                    die "Can't decrement a constant"
+                        if $locator eq '<constant>';
+                    push @blocksic, "dec $register",
+                                    "store $locator, $register";
+                }
+                when '&postcircumfix:<( )>' {
+                    push @blocksic, "call $register";
+                }
+                default {
+                    die "Don't know how to handle $call.name()";
                 }
             }
         }
-        return @decluttered;
-    }
 
-    sub renumber(@instructions) {
-        my $number = 0;
-        my %mapping;
-        # RAKUDO: $/ doesn't work in .subst closures
-        my $hack;
-        return @instructions.map: {
-            .subst( :global, / ('$' \d+) { $hack = ~$0 } /, {
-                my $varname = $hack;
-                if !%mapping.exists($varname) {
-                    %mapping{$varname} = '$' ~ $number++;
+        multi process(FUTURE::Val $val) {
+            $register = unique-register;
+            my $literal = $val.value;
+            push @blocksic, "$register = $literal";
+        }
+
+        multi process(FUTURE::Assign $assign) {
+            process $assign.children[1];
+            my $expression-register = $register;
+            process $assign.children[0]; # FUTURE::Var
+            $register = $expression-register;
+            push @blocksic, "store $locator, $register";
+        }
+
+        multi process(FUTURE::Bind $bind) {
+            process $bind.children[1];
+            my $rightloc = $locator;
+            my $expression-register = $register;
+            process $bind.children[0]; # FUTURE::Var
+            $register = $expression-register;
+            # XXX: This latter test is for catching bindings to
+            #      blocks. The test is not very robust, but it
+            #      works for the time being.
+            if $rightloc eq '<constant>' || !defined $rightloc {
+                push @blocksic, "bind $locator, $register";
+            }
+            else {
+                push @blocksic, "bind $locator, $rightloc";
+            }
+        }
+
+        multi process(FUTURE::Var $var) {
+            $register = unique-register;
+            my $b = $*current_block;
+            my $level = 0;
+            my $slot = -1;
+            while True {
+                my @vars = $b.vars.list;
+                for ^@vars -> $i {
+                    if $var.name eq @vars[$i]<name> {
+                        $slot = $i;
+                        # RAKUDO: Could use a 'last LOOP' here
+                        last;
+                    }
                 }
-                %mapping{$varname}
-            } );
-        };
+                last if $slot != -1;
+                --$level;
+                $b = %block-parents{$b.name};
+                die "Variable '$var.name()' not declared"
+                    unless defined $b;
+            }
+            $locator = "[$level, $slot]";
+            push @blocksic, "$register = fetch $locator";
+        }
+
+        multi process(FUTURE::Block $block) {
+            $register = unique-register;
+            push @blocks-to-serialize, $block
+                unless any(@already-serialized) eq $block;
+            push @blocksic,
+                "$register = closure-from-block '$block.name()'";
+            if $block.immediate {
+                push @blocksic, "call $register";
+            }
+        }
+
+        multi process(FUTURE::If $if) {
+            process $if.children[0];
+            my $after-if = unique-label;
+            push @blocksic, "jf $register, $after-if";
+
+            $if.children[1].immediate = True;
+            process $if.children[1];
+
+            my $after-else;
+            if $if.children[2] {
+                $after-else = unique-label;
+                push @blocksic, "jmp $after-else";
+            }
+            push @blocksic, "`label $after-if";
+            if $if.children[2] {
+                $if.children[2].immediate = True;
+                process $if.children[2];
+                push @blocksic,
+                    "`label $after-else";
+            }
+        }
+
+        multi process(FUTURE::Unless $unless) {
+            process $unless.children[0];
+            my $after-unless = unique-label;
+            push @blocksic, "jt $register, $after-unless";
+
+            $unless.children[1].immediate = True;
+            process $unless.children[1];
+
+            push @blocksic, "`label $after-unless";
+        }
+
+        multi process(FUTURE::While $while) {
+            my $before-while = unique-label;
+            push @blocksic, "`label $before-while";
+            process $while.children[0];
+            my $after-while = unique-label;
+            push @blocksic, "jf $register, $after-while";
+
+            $while.children[1].immediate = True;
+            process $while.children[1];
+
+            push @blocksic,
+                "jmp $before-while",
+                "`label $after-while";
+        }
+
+        multi process(FUTURE::Until $until) {
+            my $before-until = unique-label;
+            push @blocksic, "`label $before-until";
+            process $until.children[0];
+            my $after-until = unique-label;
+            push @blocksic, "jt $register, $after-until";
+
+            $until.children[1].immediate = True;
+            process $until.children[1];
+
+            push @blocksic,
+                "jmp $before-until",
+                "`label $after-until";
+        }
+
+        multi process(Any $node) {
+            die "No multi defined for {$node.WHAT.perl}, sorry :/";
+        }
+
+        sub declutter(@instructions) {
+            my @decluttered;
+            for @instructions.kv -> $i, $line {
+                # RAKUDO: !~~ doesn't bind $/
+                if not $line ~~ / ^ ('$' \d+) ' =' / {
+                    push @decluttered, $line;
+                }
+                else {
+                    my $varname = ~$0;
+                    my Bool $usages-later = False;
+                    for $i+1 ..^ +@instructions -> $j {
+                        # XXX: This heuristic fails when we reach many-digit
+                        #      reguster names, since it gives false positives
+                        #      for all prefixes
+                        ++$usages-later
+                            if defined index(@instructions[$j], $varname);
+                    }
+                    if $usages-later {
+                        push @decluttered, $line;
+                    }
+                }
+            }
+            return @decluttered;
+        }
+
+        sub renumber(@instructions) {
+            my $number = 0;
+            my %mapping;
+            # RAKUDO: $/ doesn't work in .subst closures
+            my $hack;
+            return @instructions.map: {
+                .subst( :global, / ('$' \d+) { $hack = ~$0 } /, {
+                    my $varname = $hack;
+                    if !%mapping.exists($varname) {
+                        %mapping{$varname} = '$' ~ $number++;
+                    }
+                    %mapping{$varname}
+                } );
+            };
+        }
     }
 }
 

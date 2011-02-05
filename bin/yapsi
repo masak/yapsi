@@ -3,7 +3,7 @@ use v6;
 
 use Yapsi;
 
-my @TARGETS = <run sic>;
+my @TARGETS = <run future sic>;
 
 if @*ARGS && @*ARGS[0] eq '--version' {
     my $revision = qx[git describe];
@@ -34,18 +34,20 @@ else {
 }
 
 try {
-    my @sic;
+    my @output;
     given Yapsi::Compiler.new {
-        @sic = .compile($program);
+        @output = $target eq 'future'
+                    ?? .to-future($program)
+                    !! .compile($program);
         warn $_ for .warnings;
     }
 
-    if $target eq 'sic' {
-        .say for @sic;
+    if $target eq 'run' {
+        my Yapsi::Runtime $runtime .= new;
+        $runtime.run(@output);
     }
     else {
-        my Yapsi::Runtime $runtime .= new;
-        $runtime.run(@sic);
+        .say for @output;
     }
 }
 say $! if $!;
