@@ -1,7 +1,7 @@
 Yapsi Roadmap
 -------------
 
-Last updated: 2011-01-01
+Last updated: 2011-02-05
 
 This roadmap deliberately limits itself by the horizons of the current
 design. That is, it would certainly be possible to dream further than
@@ -10,21 +10,10 @@ this document does, but this document doesn't.
 FUTURE
 ------
 
-"FUTURE" is the name of an abstract syntax tree format for Yapsi. It's
-almost, but not quite, entirely unlike PAST.
+The FUTURE is now here.
 
-The current model for parsing is reaching its limits, and needs replacing
-according to the ideas in
-http://strangelyconsistent.org/blog/its-just-a-tree-silly -- basically, add
-another compiler stage that manipulates trees:
-
-    grammar parse/action methods
-    traverse the tree
-    FUTURE                        <--- new step
-    SIC
-
-This will allow for some syntactic sugar that is quite difficult to write
-at the moment.
+This will allow for some syntactic sugar that was quite difficult to write
+up to this point.
 
 C backend
 ---------
