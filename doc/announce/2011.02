@@ -83,6 +83,11 @@ Block -- B0 [$a]
 
 It's so cute, it almost looks like Ruby!
 
+Structurally, FUTURE is a re-thinking of PAST. FUTURE is more streamlined
+than PAST, because it gets rid of the Stmts type. FUTURE is also more
+versatile than PAST, because it adds 7 new types. In most other respects,
+FUTURE is like PAST.
+
 For a complete list of changes, see doc/ChangeLog.
 
 Yapsi consists of a compiler and a runtime. The compiler processes a piece
