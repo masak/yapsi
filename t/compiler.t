@@ -37,6 +37,7 @@ my @programs-that-compile =
     'our $a',
     'my $a; $a()',
     '{ say 42 }()',
+    'my $a = 1; { say my $a = 2 }', # declare+use in block is fine
 ;
 
 sub escape($string) { $string.subst("\n", "\\n", :g) }
@@ -69,6 +70,7 @@ my @programs-that-don't-compile =   # '
     'if 5 {} else { $a }',
     'unless {}',
     'unless a {}',
+    'my $a = 1; { say $a; my $a = 2 }', # use+declaration is outlawed
 ;
 
 for @programs-that-don't-compile -> $program { # '
