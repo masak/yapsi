@@ -142,6 +142,11 @@ sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
 
 class Yapsi::Perl6::Actions {
 
+    # At any given time, %!vars maps each 'active' (currently lexically
+    # visible) variable to the name of the block containing its outermost
+    # declaration.
+    has %!vars;
+
     sub hoist($/, @subnodes) {
         # RAKUDO: Can't write this with block-style 'for' loop [perl #83420]
         (make $/{$_}.ast if $/{$_} for @subnodes)
@@ -152,7 +157,7 @@ class Yapsi::Perl6::Actions {
         self.block($/);
     }
 
-    # As opposed to %vars with its parse-global reach, @vars only has meaning
+    # As opposed to %!vars with its parse-global reach, @vars only has meaning
     # within the .block method. It enumerates all of the variables declared
     # directly in the current block. We need to clone the Array each time we
     # store it, because we keep re-using the variable.
@@ -178,9 +183,9 @@ class Yapsi::Perl6::Actions {
         }
         # RAKUDO: Can't assign to a hash when the hash is part of the rhs
         #         [perl #77586]
-        my %workaround-vars = grep { .value ne $name }, %vars;
-        %vars = %workaround-vars;
-        if first { .value eq 'declaration?' }, %vars -> $p {
+        my %workaround-vars = grep { .value ne $name }, %!vars;
+        %!vars = %workaround-vars;
+        if first { .value eq 'declaration?' }, %!vars -> $p {
             die qq[Variable "$p.key()" used but not declared];
         }
     }
@@ -241,11 +246,7 @@ class Yapsi::Perl6::Actions {
         hoist $/, <variable declaration>;
     }
 
-    # At any given time, %vars maps each 'active' (currently lexically visible)
-    # variable to the name of the block containing its outermost declaration.
-    my %vars;
-
-    # The reason we temporarily store 'declaration?' in %vars is that in a
+    # The reason we temporarily store 'declaration?' in %!vars is that in a
     # bottom-up model such as the one the actions employ, <variable> fires
     # before <declaration>. Basically, there needs to be a way to say "this
     # may be an undeclared variable, or maybe a variable that is being
@@ -253,8 +254,8 @@ class Yapsi::Perl6::Actions {
     # .variable and .block methods.
 
     method declaration($/) {
-        if %vars{~$<variable>} eq 'declaration?' {
-            %vars{~$<variable>} = @blockstack[*-1].name;
+        if %!vars{~$<variable>} eq 'declaration?' {
+            %!vars{~$<variable>} = @blockstack[*-1].name;
         }
 
         make $<variable>.ast;
@@ -262,9 +263,9 @@ class Yapsi::Perl6::Actions {
 
     method variable($/) {
         die qq[Variable "$/" used but not declared]
-            if %vars{~$/} eq 'declaration?';
-        unless %vars.exists(~$/) {
-            %vars{~$/} = 'declaration?';
+            if %!vars{~$/} eq 'declaration?';
+        unless %!vars.exists(~$/) {
+            %!vars{~$/} = 'declaration?';
         }
 
         make FUTURE::Var.new(:name(~$/));
@@ -310,7 +311,7 @@ class Yapsi::Compiler {
         $_PROGRAM = $program; # RAKUDO: Required because of [perl #76894]
         die "Could not parse"
             unless Yapsi::Perl6::Grammar.parse(
-                        $program, :actions(Yapsi::Perl6::Actions));
+                        $program, :actions(Yapsi::Perl6::Actions.new));
         return $/.ast.DEBUG;
     }
 
@@ -319,7 +320,7 @@ class Yapsi::Compiler {
         $_PROGRAM = $program; # RAKUDO: Required because of [perl #76894]
         die "Could not parse"
             unless Yapsi::Perl6::Grammar.parse(
-                        $program, :actions(Yapsi::Perl6::Actions));
+                        $program, :actions(Yapsi::Perl6::Actions.new));
         my @sic = "This is SIC v$VERSION";
         my $INDENT = '    ';
         my %package-variables;
