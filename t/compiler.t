@@ -52,34 +52,36 @@ for @programs-that-compile -> $program {
 }
 
 my @programs-that-don't-compile =   # '
-    '$a',
-    'my',
-    '$a; my $a',
-    'my $a =',
-    '$a = 42',
-    '42 = my $a',
-    '42 := my $a',
-    'say $a',
-    'say $a; my $a',
-    '++42',
-    '{ my $a }; say $a',
-    'else { 42 }',
-    'if 42 say 42',
-    'if $a {}',
-    'if 42 { $a }',
-    'if 5 {} else { $a }',
-    'unless {}',
-    'unless a {}',
-    'my $a = 1; { say $a; my $a = 2 }', # use+declaration is outlawed
+    '$a'            => 'used but not declared',
+    'my'            => 'could not parse',
+    '$a; my $a'     => 'used but not declared',
+    'my $a ='       => 'could not parse',
+    '$a = 42'       => 'used but not declared',
+    '42 = my $a'    => 'could not parse',
+    '42 := my $a'   => 'could not parse',
+    'say $a'        => 'used but not declared',
+    'say $a; my $a' => 'used but not declared',
+    '++42'          => 'could not parse',
+    '{ my $a }; say $a'   => 'used but not declared',
+    'else { 42 }'         => 'could not parse',
+    'if 42 say 42'        => 'could not parse',
+    'if $a {}'            => 'could not parse',
+    'if 42 { $a }'        => 'used but not declared',
+    'if 5 {} else { $a }' => 'used but not declared',
+    'unless {}'           => 'could not parse',
+    'unless a {}'         => 'could not parse',
+    'my $a = 1; { say $a; my $a = 2 }' => 'reference to outer variable',
 ;
 
-for @programs-that-don't-compile -> $program { # '
+for @programs-that-don't-compile -> $pair { # '
+    my ($program, $expected-error) = .key, .value given $pair;
     my $can-compile = False;
     try {
         $c.compile($program);
         $can-compile = True;
     }
-    ok !$can-compile, "will not compile '$program'";
+    ok !$can-compile && defined $!.substr($expected-error),
+        "'{escape $program}' gives error '$expected-error'";
 }
 
 done;
