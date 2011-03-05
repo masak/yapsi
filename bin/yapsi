@@ -5,13 +5,31 @@ use Yapsi;
 
 my @TARGETS = <run future sic>;
 
+sub run-code($target, $program) {
+    try {
+        my @output;
+        given Yapsi::Compiler.new {
+            @output = $target eq 'future'
+                        ?? .to-future($program)
+                        !! .compile($program);
+            warn $_ for .warnings;
+        }
+
+        if $target eq 'run' {
+            my Yapsi::Runtime $runtime .= new;
+            $runtime.run(@output);
+        }
+        else {
+            .say for @output;
+        }
+    }
+    say $! if $!;
+}
+
 if @*ARGS && @*ARGS[0] eq '--version' {
     my $revision = qx[git describe];
     say "This is Yapsi, revision $revision";
     shift @*ARGS;
-    unless @*ARGS {
-        push @*ARGS, '-e', '';
-    }
 }
 
 my $target = 'run';
@@ -22,32 +40,15 @@ if @*ARGS && @*ARGS[0] ~~ /'--target='(\w+)/ {
     shift @*ARGS;
 }
 
-my $program;
 if @*ARGS == 2 && @*ARGS[0] eq '-e' {
-    $program = @*ARGS[1];
+    run-code $target, @*ARGS[1];
 }
 elsif @*ARGS == 1 {
-    $program = slurp @*ARGS[0];
+    run-code $target, slurp(@*ARGS[0]);
+}
+elsif @*ARGS == 0 {
+    while prompt("yapsi> ") -> $code { run-code($target, $code) };
 }
 else {
     die "Usage: `$*PROGRAM_NAME <file>` or `$*PROGRAM_NAME -e '<program>'`";
 }
-
-try {
-    my @output;
-    given Yapsi::Compiler.new {
-        @output = $target eq 'future'
-                    ?? .to-future($program)
-                    !! .compile($program);
-        warn $_ for .warnings;
-    }
-
-    if $target eq 'run' {
-        my Yapsi::Runtime $runtime .= new;
-        $runtime.run(@output);
-    }
-    else {
-        .say for @output;
-    }
-}
-say $! if $!;
