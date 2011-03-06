@@ -53,6 +53,8 @@ my @tests =
     '{ say 42 }()',                    "42\n",      'call a block',
     'sub foo { say 42 }; foo()',       "42\n",      'call a named sub',
     'foo(); sub foo { say 5 }',        "5\n",       'call before declaration',
+    'sub foo { bar; sub bar { say 42 } }; foo',
+                                       "42\n",      'nested sub call',
 ;
 
 for @tests -> $program, $expected, $message {
