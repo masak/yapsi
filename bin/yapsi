@@ -5,7 +5,7 @@ use Yapsi;
 
 my @TARGETS = <run future sic>;
 
-sub run-code($target, $program) {
+sub run-code($program, :$target) {
     try {
         my @output;
         given Yapsi::Compiler.new {
@@ -41,14 +41,17 @@ if @*ARGS && @*ARGS[0] ~~ /'--target='(\w+)/ {
 }
 
 if @*ARGS == 2 && @*ARGS[0] eq '-e' {
-    run-code $target, @*ARGS[1];
+    run-code(@*ARGS[1], :$target);
 }
 elsif @*ARGS == 1 {
-    run-code $target, slurp(@*ARGS[0]);
+    run-code(slurp(@*ARGS[0]), :$target);
 }
 elsif @*ARGS == 0 {
-    while prompt("yapsi> ") -> $code { run-code($target, $code) };
+    while prompt(">>> ") -> $program {
+        run-code($program, :$target);
+    }
 }
 else {
-    die "Usage: `$*PROGRAM_NAME <file>` or `$*PROGRAM_NAME -e '<program>'`";
+    die
+      "Usage: `$*PROGRAM_NAME \[<file>\]` or `$*PROGRAM_NAME -e '<program>'`";
 }
