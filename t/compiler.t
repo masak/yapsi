@@ -84,7 +84,7 @@ for @programs-that-don't-compile -> $pair { # '
         $c.compile($program);
         $can-compile = True;
     }
-    ok !$can-compile && defined $!.substr($expected-error),
+    ok !$can-compile && defined $!.index($expected-error),
         "'{escape $program}' gives error '$expected-error'";
 }
 
