@@ -51,7 +51,10 @@ grammar Yapsi::Perl6::Grammar {
                   || <increment> }
     rule  declaration {
         <subdecl>
-        || $<declarator>=['my'|'our'] [<subdecl> || <variable>]
+        || $<declarator>=['my'|'our']
+           [<subdecl> || <variable> ||
+            { die "Malformed $<declarator>" }]
+
     }
     rule  subdecl { 'sub' $<subname>=[\w+] <block> }
 
@@ -490,7 +493,7 @@ class Yapsi::Compiler {
                 last if $slot != -1;
                 --$level;
                 $b = %block-parents{$b.name};
-                die "Variable '$var.name()' not declared"
+                die "Variable '$var.name()' used but not declared"
                     unless defined $b;
             }
             $locator = "[$level, $slot]";
