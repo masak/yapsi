@@ -184,7 +184,7 @@ class Yapsi::Perl6::Actions {
         my $block = @blockstack.pop;
         my $name = $block.name;
         $block.vars = @vars.list;
-        $block.children = $<statementlist><statement>».ast;
+        $block.children.push($<statementlist><statement>».ast.grep(*.defined));
         make $block;
         if @blockstack {
             %block-parents{$name} = @blockstack[*-1];
@@ -277,7 +277,7 @@ class Yapsi::Perl6::Actions {
                 FUTURE::Var.new(:$name),
                 $<subdecl><block>.ast
             );
-            make $bind;
+            @blockstack[*-1].children.push($bind);
         }
     }
 

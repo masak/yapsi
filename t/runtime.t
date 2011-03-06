@@ -51,6 +51,8 @@ my @tests =
     'my $a = { say 42 }; say 1; $a()', "1\n42\n",   'non-immediate block',
     'my $a := { say 2 }; say 1; $a()', "1\n2\n",    'bind block and call',
     '{ say 42 }()',                    "42\n",      'call a block',
+    'sub foo { say 42 }; foo()',       "42\n",      'call a named sub',
+    'foo(); sub foo { say 5 }',        "5\n",       'call before declaration',
 ;
 
 for @tests -> $program, $expected, $message {
