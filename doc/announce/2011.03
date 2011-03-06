@@ -11,7 +11,8 @@ You will recall my earlier submissions on the same topic. To my great
 disappointment, they were rejected by the esteemed fellows of the
 committee, on the grounds that they didn't advance the state of the art
 of Computer Science. Though immensely saddened by this verdict, I am
-compelled, in retrospect, to agree.
+compelled, in retrospect, to agree. The previous submissions were
+all "official and complete", though hardly ground-breaking.
 
 However, this month I bring before you an invention that I believe
 has the potential to change how we think about computing machines and
@@ -79,8 +80,9 @@ A few points of clarification are in order:
 * It is even a possibility for a routine to invoke *itself*, or for two
   or more routines to contain invocations of each other. While this may
   seem like an especially perverted idea, early investigations reveal
-  that it might actually have real-world uses. I propose we leave the
-  ability in for now rather than dismiss it outright.
+  that this phenomenon (which I have chosen to call "invocation
+  reccurrence") might actually have real-world uses. I propose we leave
+  the ability in for now rather than dismiss it outright.
 
 * There is also no *a priori* restriction on a routine being declared
   inside another routine. This notion, however, truly *is* perverse and
@@ -107,9 +109,12 @@ concerns about performance.
 I believe that routines in computer programs are here to stay. In a
 few decades, we might see them as something commonplace, almost mundane.
 
-In the present release, I also wish to highlight the good work of my
-associate, Tadeusz Sośnierz (tadzik). He has provided Yapsi with a
+In the present release, I also wish to highlight the excellent work of
+my associate, Tadeusz Sośnierz (tadzik). He has provided Yapsi with a
 feature called a "REPL", which I also believe will be of some importance.
+
+For a complete set of changes to this release, please refer to
+doc/ChangeLog.
 
 With that, there's only one thing that I wish to say to my esteemed
 colleagues in the committee:
