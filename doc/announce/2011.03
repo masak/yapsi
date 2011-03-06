@@ -103,20 +103,39 @@ above-mentioned "stack". While I concede that there is indeed an
 unavoidable cost involved at the boundaries of each routine, I believe
 that it can be made very small, such that only the most speed-stipulating
 computer programmers will care for the difference. In the long run,
-I predict the benefits of the abstraction mechanism itself will dwarf
+I predict that the benefits of the abstraction mechanism itself will dwarf
 concerns about performance.
 
 I believe that routines in computer programs are here to stay. In a
 few decades, we might see them as something commonplace, almost mundane.
 
 In the present release, I also wish to highlight the excellent work of
-my associate, Tadeusz Sośnierz (tadzik). He has provided Yapsi with a
-feature called a "REPL", which I also believe will be of some importance.
+my associate, Tadeusz Sośnierz (tadzik++). He has provided Yapsi with a
+feature called a "REPL", which I also believe will be of importance.
 
 For a complete set of changes to this release, please refer to
 doc/ChangeLog.
 
-With that, there's only one thing that I wish to say to my esteemed
-colleagues in the committee:
+In fact, if you will allow me to perform an "instantaneous
+demonstration"... you will? Oh good.
+
+    $ bin/yapsi
+    >>> sub foo { say 42 }; foo; foo
+    42
+    42
+    >>> my $i = 10; sub foo { say $i; if --$i { foo } }; foo
+    10
+    9
+    8
+    7
+    6
+    5
+    4
+    3
+    2
+    1
+
+With that, I bid the esteemed colleagues of the committe a good evening,
+with what I believe to be fitting farewell:
 
 Have the appropriate amount of fun! \o/
