@@ -44,7 +44,8 @@ grammar Yapsi::Perl6::Grammar {
 
     token expression { <assignment> || <binding> || <variable> || <literal>
                        || <declaration> || <invocation> || <block>
-                       || <saycall> || <increment> || <decrement> }
+                       || <saycall> || <subcall> || <increment> || <decrement>
+                     }
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
                   || <increment> }
@@ -59,6 +60,7 @@ grammar Yapsi::Perl6::Grammar {
     rule  assignment { <lvalue> '=' <expression> }
     rule  binding { <lvalue> ':=' <expression> }
     rule  saycall { 'say' <expression> }  # very temporary solution
+    rule  subcall { $<subname>=[\w+]'()'? }
     rule  increment { '++' <value> }
     rule  decrement { '--' <value> }
     rule  invocation { [<variable>||<block>]'()' }
@@ -240,8 +242,8 @@ class Yapsi::Perl6::Actions {
     }
 
     method expression($/) {
-        hoist $/, <assignment literal saycall variable declaration binding
-                   increment decrement invocation block>;
+        hoist $/, <assignment literal saycall subcall variable declaration
+                   binding increment decrement invocation block>;
     }
 
     method lvalue($/) {
@@ -303,6 +305,11 @@ class Yapsi::Perl6::Actions {
 
     method saycall($/) {
         make FUTURE::Call.new(:name('&say'), :children($<expression>.ast));
+    }
+
+    method subcall($/) {
+        make FUTURE::Call.new(:name('&' ~ $<subname>),
+                              :children());
     }
 
     method increment($/) {
@@ -400,7 +407,9 @@ class Yapsi::Compiler {
         }
 
         multi process(FUTURE::Call $call) {
-            process $call.children[0]; # a FUTURE::Expression
+            if $call.children.elems {
+                process $call.children[0]; # a FUTURE::Expression
+            }
 
             given $call.name {
                 when '&say' {
@@ -425,7 +434,10 @@ class Yapsi::Compiler {
                     push @blocksic, "call $register";
                 }
                 default {
-                    die "Don't know how to handle $call.name()";
+                    # This is slightly cannibalistic, but still better than
+                    # code duplication
+                    process FUTURE::Var.new(:name($call.name));
+                    push @blocksic, "call $register";
                 }
             }
         }
@@ -560,7 +572,7 @@ class Yapsi::Compiler {
         }
 
         multi process(Any $node) {
-            die "No multi defined for {$node.WHAT.perl}, sorry :/";
+            die "No multi 'process' defined for {$node.WHAT.perl}, sorry :/";
         }
 
         sub declutter(@instructions) {

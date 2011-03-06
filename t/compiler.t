@@ -41,6 +41,8 @@ my @programs-that-compile =
     'sub foo {}',
     'my sub foo {}',
     'our sub foo {}',
+    'sub foo {}; foo',
+    'sub foo {}; foo()',
 ;
 
 sub escape($string) { $string.subst("\n", "\\n", :g) }
@@ -75,6 +77,7 @@ my @programs-that-don't-compile =   # '
     'unless a {}'         => 'could not parse',
     'my $a = 1; { say $a; my $a = 2 }' => 'reference to outer variable',
     'sub foo'             => 'could not parse',
+    'foo'                 => 'undefined subroutine',
 ;
 
 for @programs-that-don't-compile -> $pair { # '
