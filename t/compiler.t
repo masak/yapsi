@@ -38,6 +38,9 @@ my @programs-that-compile =
     'my $a; $a()',
     '{ say 42 }()',
     'my $a = 1; { say my $a = 2 }', # declare+use in block is fine
+    'sub foo {}',
+    'my sub foo {}',
+    'our sub foo {}',
 ;
 
 sub escape($string) { $string.subst("\n", "\\n", :g) }
@@ -71,6 +74,7 @@ my @programs-that-don't-compile =   # '
     'unless {}'           => 'could not parse',
     'unless a {}'         => 'could not parse',
     'my $a = 1; { say $a; my $a = 2 }' => 'reference to outer variable',
+    'sub foo'             => 'could not parse',
 ;
 
 for @programs-that-don't-compile -> $pair { # '

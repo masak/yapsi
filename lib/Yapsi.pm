@@ -48,7 +48,11 @@ grammar Yapsi::Perl6::Grammar {
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
                   || <increment> }
-    rule  declaration { $<declarator>=['my'|'our'] <variable> }
+    rule  declaration {
+        <subdecl>
+        || $<declarator>=['my'|'our'] [<subdecl> || <variable>]
+    }
+    rule  subdecl { 'sub' $<subname>=[\w+] <block> }
 
     token variable { '$' \w+ }
     token literal { \d+ }
@@ -164,8 +168,10 @@ class Yapsi::Perl6::Actions {
     my @vars;
     my &find-declarations = sub ($m, $key) {
         if $key eq "declaration" {
-            push @vars, { :name(~$m<variable>),
-                          :our($m<declarator> eq 'our') };
+            my $name = $m<variable> ?? ~$m<variable>
+                                    !! '&' ~ $m<subdecl><subname>;
+            my $our = $m<declarator> eq 'our';
+            push @vars, { :$name, :$our };
         }
     };
 
@@ -254,11 +260,23 @@ class Yapsi::Perl6::Actions {
     # .variable and .block methods.
 
     method declaration($/) {
-        if %!vars{~$<variable>} eq 'declaration?' {
-            %!vars{~$<variable>} = @blockstack[*-1].name;
-        }
+        if $<variable> {
+            if %!vars{~$<variable>} eq 'declaration?' {
+                %!vars{~$<variable>} = @blockstack[*-1].name;
+            }
 
-        make $<variable>.ast;
+            make $<variable>.ast;
+        }
+        else {  # subdecl
+            my $name = '&' ~ $<subdecl><subname>;
+            %!vars{$name} = @blockstack[*-1].name;
+            my $bind = FUTURE::Bind.new();
+            $bind.children.push(
+                FUTURE::Var.new(:$name),
+                $<subdecl><block>.ast
+            );
+            make $bind;
+        }
     }
 
     method variable($/) {
