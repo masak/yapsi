@@ -50,6 +50,7 @@ elsif @*ARGS == 0 {
     while prompt(">>> ") -> $program {
         run-code($program, :$target);
     }
+    say '';
 }
 else {
     die
