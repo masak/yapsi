@@ -1,7 +1,7 @@
 Yapsi Roadmap
 -------------
 
-Last updated: 2011-02-05
+Last updated: 2011-03-07
 
 This roadmap deliberately limits itself by the horizons of the current
 design. That is, it would certainly be possible to dream further than
@@ -12,8 +12,8 @@ FUTURE
 
 The FUTURE is now here.
 
-This will allow for some syntactic sugar that was quite difficult to write
-up to this point.
+This has already allowed for some syntactic sugar that was quite difficult to
+write before. For example, we now have named subs.
 
 C backend
 ---------
@@ -26,7 +26,6 @@ isn't optimized to be fast, but this one could be.
 Mid-term goals
 --------------
 
-+ named subs
 + &return
 + FIRST, LAST phasers
 + &last, &redo, &next (using control exceptions)

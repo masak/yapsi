@@ -1,3 +1,8 @@
+New in 2011.03 release
++ a bugfix making Yapsi::Compiler reusable
++ named subroutines
++ a REPL
+
 New in 2011.02 release
 + FUTURE refactor
 + a --target=FUTURE option for bin/yapsi
