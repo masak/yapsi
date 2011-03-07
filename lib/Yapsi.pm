@@ -465,14 +465,11 @@ class Yapsi::Compiler {
             my $expression-register = $register;
             process $bind.children[0]; # FUTURE::Var
             $register = $expression-register;
-            # XXX: This latter test is for catching bindings to
-            #      blocks. The test is not very robust, but it
-            #      works for the time being.
-            if $rightloc eq '<constant>' || !defined $rightloc {
-                push @blocksic, "bind $locator, $register";
+            if $bind.children[1] ~~ FUTURE::Var {
+                push @blocksic, "bind $locator, $rightloc";
             }
             else {
-                push @blocksic, "bind $locator, $rightloc";
+                push @blocksic, "bind $locator, $register";
             }
         }
 
