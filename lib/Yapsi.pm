@@ -422,13 +422,13 @@ class Yapsi::Compiler {
                     $register = $result-register;
                 }
                 when '&prefix:<++>' {
-                    die "Can't increment a constant"
+                    die "Cannot increment a constant"
                         if $locator eq '<constant>';
                     push @blocksic, "inc $register",
                                     "store $locator, $register";
                 }
                 when '&prefix:<-->' {
-                    die "Can't decrement a constant"
+                    die "Cannot decrement a constant"
                         if $locator eq '<constant>';
                     push @blocksic, "dec $register",
                                     "store $locator, $register";
@@ -621,7 +621,7 @@ class Yapsi::Compiler {
 class Value {
     has $.payload;
 
-    method store($v) { die "Can't assign to a readonly value" }
+    method store($v) { die "Cannot assign to a readonly value" }
 }
 
 class Container {
