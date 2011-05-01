@@ -1,3 +1,7 @@
+New in 2011.05 release
++ a bugfix enabling nesting of subdecls
++ ENTER phaser
+
 New in 2011.03 release
 + a bugfix making Yapsi::Compiler reusable
 + named subroutines

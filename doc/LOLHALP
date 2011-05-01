@@ -3,7 +3,7 @@ the commit logs at how similar features were implemented.
 
 * 'loop' keyword. (at least the infinitely looping version is easy.)
 * 'repeat' keyword.
-* 'ENTER', 'LEAVE', 'FIRST', 'NEXT', and 'LAST' phasers.
+* 'LEAVE', 'FIRST', 'NEXT', and 'LAST' phasers.
 * 'goto' keyword.
 
 All contributions are welcome; especially those with good test coverage and a

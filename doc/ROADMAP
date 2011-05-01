@@ -1,19 +1,11 @@
 Yapsi Roadmap
 -------------
 
-Last updated: 2011-03-07
+Last updated: 2011-05-01
 
 This roadmap deliberately limits itself by the horizons of the current
 design. That is, it would certainly be possible to dream further than
 this document does, but this document doesn't.
-
-FUTURE
-------
-
-The FUTURE is now here.
-
-This has already allowed for some syntactic sugar that was quite difficult to
-write before. For example, we now have named subs.
 
 C backend
 ---------
@@ -33,6 +25,6 @@ Mid-term goals
 + &die using control exceptions
 + INIT, END phasers
 + START phaser
-+ ENTER, LEAVE/KEEP/UNDO phasers
++ LEAVE/KEEP/UNDO phasers
 + PRE, POST phasers
 + CATCH, CONTROL phasers
