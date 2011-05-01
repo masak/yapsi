@@ -1,0 +1,64 @@
+It is with superfluous glee that I announce on behalf of the Yapsi
+development team the May 2011 release of Yapsi, a Perl 6 compiler
+written in Perl 6. Yeah.
+
+You can download it here:
+
+ <http://github.com/downloads/masak/yapsi/yapsi-2011.05.tar.gz>
+
+Yapsi is implemented in Perl 6. It thus requires a Perl 6 implementation to
+build and run. This release of Yapsi has been confirmed to work on all
+releases of Rakudo Star to date.
+
+Yapsi is an "official and complete" implementation of Perl 6. By general
+agreement, no Perl 6 implementation is "the official implementation"...
+which is why Yapsi only makes claims to be "AN official implementation".
+Similarly, it's only "complete" in a very restricted sense, namely "not
+really complete".
+
+This month's release introduces ENTER blocks. So now you can have code
+execute at the beginning of your program without having to actually
+place it in the beginning of your program.
+
+    $ bin/yapsi -e 'say 2; ENTER { say 1 }; say 3'
+    1
+    2
+    3
+
+The two other big compilers, Rakudo and Niecza, don't have this feature
+yet. Pugs does, however.
+
+For a complete list of changes, see doc/ChangeLog.
+
+Yapsi consists of a compiler and a runtime. If this feels in any way
+unsettling, then your career probably isn't language implementations.
+The compiler generates runnable instructions of a format called SIC.
+If *that* feels unsettling, that just means you're relatively normal.
+SIC is what the compiler emits and the runtime consumes. Yeah, that's
+gross. There's a syntax tree format from which SIC is generated, which
+for more or less obscure reasons is called FUTURE. That's unsettling,
+too.
+
+As usual, the SIC version is kept in sync with the Yapsi version, and
+no SIC version is or has ever been backwards- or forwards-compatible with
+any Yapsi version, even when in actual fact, they are. This strict
+versioning policy is kept in place just so people won't get any ideas.
+
+The versioning of FUTURE, however, abides by an advanced deprecation
+policy which is never really spelled out or elaborated on. This means
+that you can never be sure when or how the features you rely upon
+from FUTURE will change in the future. And thus, the FUTURE isn't
+what it used to be.
+
+An overarching goal for making a Perl 6 compiler-and-runtime is to use it as
+a server for various other projects, which hook in at different steps:
+
+* A time-traveling debugger (tardis), which hooks into the runtime.
+  Already underway, see <http://github.com/masak/tardis>
+* A coverage tool (lid), which will also hook into the runtime.
+* A syntax checker (sigmund), which will use output from the parser.
+
+Another overarching goal is to optimize for fun while learning about parsers,
+compilers, and runtimes.
+
+Have the appropriate amount of fun! \o/
