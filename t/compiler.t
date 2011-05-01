@@ -43,6 +43,7 @@ my @programs-that-compile =
     'our sub foo {}',
     'sub foo {}; foo',
     'sub foo {}; foo()',
+    'say 2; ENTER { say 1 }'
 ;
 
 sub escape($string) { $string.subst("\n", "\\n", :g) }

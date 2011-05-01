@@ -55,6 +55,7 @@ my @tests =
     'foo(); sub foo { say 5 }',        "5\n",       'call before declaration',
     'sub foo { bar; sub bar { say 42 } }; foo',
                                        "42\n",      'nested sub call',
+    'say 2; ENTER { say 1 }; say 3',   "1\n2\n3\n", 'ENTER phaser',
 ;
 
 for @tests -> $program, $expected, $message {

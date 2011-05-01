@@ -43,9 +43,10 @@ grammar Yapsi::Perl6::Grammar {
     rule  statement_control_until { 'until' <expression> <block> }
 
     token expression { <assignment> || <binding> || <variable> || <literal>
-                       || <declaration> || <invocation> || <block>
+                       || <declaration> || <invocation> || <block> || <phaser>
                        || <saycall> || <subcall> || <increment> || <decrement>
                      }
+    rule phaser { 'ENTER' <block> }
     token lvalue { <declaration> || <variable> || <increment> }
     token value { <variable> || <literal> || <declaration> || <saycall>
                   || <increment> }
@@ -104,6 +105,7 @@ class FUTURE::Block is FUTURE::Node {
     has $.name;
     has @.vars is rw;
     has $.immediate is rw;
+    has $.phaser is rw;
 
     method info { [~] ' -- ', $.name,
                       (' [', @.vars»<name>.join(', '), ']' if @.vars) }
@@ -246,7 +248,12 @@ class Yapsi::Perl6::Actions {
 
     method expression($/) {
         hoist $/, <assignment literal saycall subcall variable declaration
-                   binding increment decrement invocation block>;
+                   binding increment decrement invocation block phaser>;
+    }
+
+    method phaser($/) {
+        hoist $/, ('block', );
+        $/.ast.phaser = True;
     }
 
     method lvalue($/) {
@@ -501,10 +508,17 @@ class Yapsi::Compiler {
             $register = unique-register;
             push @blocks-to-serialize, $block
                 unless any(@already-serialized) eq $block;
-            push @blocksic,
-                "$register = closure-from-block '$block.name()'";
-            if $block.immediate {
-                push @blocksic, "call $register";
+            if $block.phaser {
+                unshift @blocksic,
+                    "$register = closure-from-block '$block.name()'",
+                    "call $register";
+            }
+            else {
+                push @blocksic,
+                    "$register = closure-from-block '$block.name()'";
+                if $block.immediate {
+                    push @blocksic, "call $register";
+                }
             }
         }
 
