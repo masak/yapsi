@@ -195,7 +195,7 @@ class Yapsi::Perl6::Actions {
         my $block = @blockstack.pop;
         my $name = $block.name;
         $block.vars = @vars.list;
-        $block.children.push($<statementlist><statement>.map(*.ast).grep(*.defined));
+        $block.children.push($<statementlist><statement>.map(*.ast).grep(*.^isa(FUTURE_Node)));
         make $block;
         if @blockstack {
             %block-parents{$name} = @blockstack[*-1];
@@ -788,13 +788,13 @@ class Yapsi::Runtime {
                         reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] - 1;
                     }
                     when / ^ 'jf $'(\d+)', '(\S+) $ / {
-                        if reg[+$0] == 0 {
+                        if reg[+$0] eq 'Any()' || reg[+$0] == 0 {
                             $ip = find-label(@sic, ~$1);
                         }
                         self.tick;
                     }
                     when / ^ 'jt $'(\d+)', '(\S+) $ / {
-                        if reg[+$0] != 0 {
+                        if reg[+$0] ne 'Any()' && reg[+$0] != 0 {
                             $ip = find-label(@sic, ~$1);
                         }
                         self.tick;

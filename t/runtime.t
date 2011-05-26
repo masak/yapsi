@@ -1,8 +1,6 @@
 use v6;
 
 use Test;
-plan *;
-
 use Yapsi;
 
 my $out = "";
