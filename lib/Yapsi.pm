@@ -385,7 +385,7 @@ class Yapsi::Compiler {
         my @already-serialized;
 
         while @blocks-to-serialize > @already-serialized {
-            my $block = first -> $b { !grep * eq $b, @already-serialized },
+            my $block = first -> $b { !grep * === $b, @already-serialized },
                               @blocks-to-serialize;
             serialize $block;
             push @already-serialized, $block;
@@ -513,7 +513,7 @@ class Yapsi::Compiler {
         multi process(FUTURE_Block $block) {
             $register = unique-register;
             push @blocks-to-serialize, $block
-                unless grep * eq $block, @already-serialized;
+                unless grep * === $block, @already-serialized;
             if $block.phaser {
                 unshift @blocksic,
                     "$register = closure-from-block '$block.name()'",
@@ -684,6 +684,7 @@ sub find-label(@sic, $name) {
 }
 
 class Yapsi::Runtime {
+    has $.io = &say;
     has Lexpad $.current-lexpad;
 
     method tick() {}
@@ -819,7 +820,7 @@ class Yapsi::Runtime {
                         self.tick;
                     }
                     when / ^ 'say $'(\d+) $ / {
-                        say(reg[+$0]);
+                        self.io.(reg[+$0]);
                         self.tick;
                     }
                     default {

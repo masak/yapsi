@@ -1,10 +1,8 @@
 use v6;
 
 use Test;
-plan *;
-
 use Yapsi;
-my Yapsi::Compiler $c .= new;
+my $c = ::Yapsi::Compiler.new;
 
 my @programs-that-compile =
     '',
@@ -46,7 +44,7 @@ my @programs-that-compile =
     'say 2; ENTER { say 1 }'
 ;
 
-sub escape($string) { $string.subst("\n", "\\n", :g) }
+sub escape($string) { $string.subst(/\n/, "\\n", :g) }
 
 for @programs-that-compile -> $program {
     my $can-compile = False;
@@ -88,7 +86,7 @@ for @programs-that-don't-compile -> $pair { # '
         $c.compile($program);
         $can-compile = True;
     }
-    ok !$can-compile && defined $!.index($expected-error),
+    ok !$can-compile && defined($!.index($expected-error)),
         "'{escape $program}' gives error '$expected-error'";
 }
 
