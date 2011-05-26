@@ -6,6 +6,9 @@ use v6;
     augment class List {
         method kv() { my $i = 0; self.map({ $i++, $_ }) }
     }
+    augment class Match {
+        method keys () { %(self).keys }
+    }
 }
 
 my $VERSION = '2011.05';
@@ -151,12 +154,12 @@ class FUTURE_Until  is FUTURE_Op {}
 sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
     action($m, $key);
     for %($m).keys -> $key {
-        next if grep * == $key, @skip;
+        next if grep * eq $key, @skip;
         given $m{$key} {
             when Match { traverse-top-down($_, :$key, :&action, :@skip) }
-            when Array { traverse-top-down($_, :$key, :&action, :@skip)
+            when List  { traverse-top-down($_, :$key, :&action, :@skip)
                             for .list }
-            default { die "Unknown thing $_.WHAT() in parse tree!" }
+            default { die "Unknown thing $m.keys() / $key / $_.typename() in parse tree!" }
         }
     }
 }
@@ -169,9 +172,13 @@ class Yapsi::Perl6::Actions {
     has %!vars;
 
     sub hoist($/, @subnodes) {
-        # RAKUDO: Can't write this with block-style 'for' loop [perl #83420]
-        (make $/{$_}.ast if $/{$_} for @subnodes)
-            or die "Couldn't hoist $/.keys.join(' '), not among @subnodes[]";
+        for @subnodes {
+            if $/{$_} {
+                make $/{$_}.ast;
+                return;
+            }
+        }
+        die "Couldn't hoist $/.keys.join(' '), not among {@subnodes}";
     }
 
     method TOP($/) {
@@ -231,8 +238,8 @@ class Yapsi::Perl6::Actions {
     }
 
     method statement_control($/) {
-        hoist $/, <statement_control_if statement_control_unless
-                   statement_control_while statement_control_until>;
+        hoist $/, (<statement_control_if statement_control_unless
+                    statement_control_while statement_control_until>);
     }
 
     method statement_control_if($/) {
@@ -257,8 +264,8 @@ class Yapsi::Perl6::Actions {
     }
 
     method expression($/) {
-        hoist $/, <assignment literal saycall subcall variable declaration
-                   binding increment decrement invocation block phaser>;
+        hoist $/, (<assignment literal saycall subcall variable declaration
+                    binding increment decrement invocation block phaser>);
     }
 
     method phaser($/) {
@@ -267,11 +274,11 @@ class Yapsi::Perl6::Actions {
     }
 
     method lvalue($/) {
-        hoist $/, <declaration variable increment decrement>;
+        hoist $/, (<declaration variable increment decrement>);
     }
 
     method value($/) {
-        hoist $/, <variable declaration>;
+        hoist $/, (<variable declaration>);
     }
 
     # The reason we temporarily store 'declaration?' in %!vars is that in a
@@ -747,8 +754,8 @@ class Yapsi::Runtime {
         self.tick;
         my $ip = 3;
         while @registers-stack {
-            while @sic[$ip++] -> $line {
-                given $line.substr(4) {
+            while my $line = @sic[$ip++] {
+                given substr($line,4) {
                     when / ^ '`' / {}
                     when / ^ '$'(\d+) ' = ' (\d+) $ / { reg[+$0] = +$1 }
                     when / ^ 'store ['[(0)||'-'(\d+)]', '(\d+)'], $'(\d+) $ / {
