@@ -1,16 +1,5 @@
 use v6;
 
-#NIECZA
-{
-    use MONKEY_TYPING;
-    augment class List {
-        method kv() { my $i = 0; self.map({ $i++, $_ }) }
-    }
-    augment class Match {
-        method keys () { %(self).keys }
-    }
-}
-
 my $VERSION = '2011.05';
 
 my $_PROGRAM; # RAKUDO: Part of workaround required because of [perl #76894]
@@ -311,7 +300,7 @@ class Yapsi::Perl6::Actions {
     method variable($/) {
         die qq[Variable "$/" used but not declared]
             if %!vars{~$/} eq 'declaration?';
-        unless %!vars{~$/}:exists { #NIECZA: no .exists method
+        unless %!vars.exists(~$/) {
             %!vars{~$/} = 'declaration?';
         }
 
@@ -639,7 +628,7 @@ class Yapsi::Compiler {
             return @instructions.map: {
                 .subst( :global, / ('$' \d+) { $hack = ~$0 } /, {
                     my $varname = $hack;
-                    if !(%mapping{$varname}:exists) { # NIECZA no .exists
+                    if !%mapping.exists($varname) {
                         %mapping{$varname} = '$' ~ $number++;
                     }
                     %mapping{$varname}
@@ -742,7 +731,7 @@ class Yapsi::Runtime {
                     default { die "Unknown directive $0"; }
                 }
             }
-            return Lexpad.new(:@slots, :names((my %hash = @vars.kv).invert), :$outer); #OK
+            return Lexpad.new(:@slots, :names((my %hash = map -> $a, $b { $b => $a }, @vars.kv)), :$outer); #OK
         }
 
         try {

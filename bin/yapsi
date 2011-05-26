@@ -6,7 +6,6 @@ use Yapsi;
 my @TARGETS = <run future sic>;
 
 my $*PROGRAM_NAME = 'yapsi';
-sub prompt($str) { print $str; $*IN.get }
 
 sub run-code($program, :$target) {
     try {
