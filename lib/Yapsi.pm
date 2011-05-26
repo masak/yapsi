@@ -1,17 +1,25 @@
 use v6;
 
+#NIECZA
+{
+    use MONKEY_TYPING;
+    augment class List {
+        method kv() { my $i = 0; self.map({ $i++, $_ }) }
+    }
+}
+
 my $VERSION = '2011.05';
 
 my $_PROGRAM; # RAKUDO: Part of workaround required because of [perl #76894]
 
 # At any given time, @blockstack contains the chain of blocks we're in,
 # from the outermost (the main program body), to the innermost. Each block
-# is stored as a FUTURE::Block, with the keys :name :vars, though :vars is
+# is stored as a FUTURE_Block, with the keys :name :vars, though :vars is
 # only filled in at the time of the action method at the end of the parsing of
 # the block.
 my @blockstack;
 
-class FUTURE::Block { ... }
+class FUTURE_Block { ... }
 
 my %block-parents;
 
@@ -19,11 +27,11 @@ grammar Yapsi::Perl6::Grammar {
     regex TOP { ^
                 { %block-parents = ();
                   push @blockstack,
-                       FUTURE::Block.new( :name(unique-block()) ) }
+                       FUTURE_Block.new( :name(unique-block()) ) }
                 <statementlist> <.ws> $ }
     token block { <.ws> '{'
                   { push @blockstack,
-                         FUTURE::Block.new( :name(unique-block()) ) }
+                         FUTURE_Block.new( :name(unique-block()) ) }
                   <.ws> <statementlist> <.ws> '}' }
     regex statementlist { <statement> ** <eat_terminator> }
     token statement { <statement_control> || <expression> || '' }
@@ -75,8 +83,8 @@ sub unique-block() {
     'B' ~ $block-number++;
 }
 
-class FUTURE::Node {
-    has FUTURE::Node @.children is rw;
+class FUTURE_Node {
+    has FUTURE_Node @.children is rw;
 
     method push(*@nodes) {
         @!children.push(|@nodes);
@@ -91,8 +99,10 @@ class FUTURE::Node {
         sub helper($node, $index) {
             take [~] '  ' x $index,
                      $node.WHAT.perl.subst(/^ .*? '::'/, ''),
-                     $node.?info;
-            helper($_, $index + 1) for $node.?children;
+                     ($node.^can("info") ?? $node.info !! "");
+            if $node.^can("children") {
+                helper($_, $index + 1) for $node.children;
+            }
         }
 
         return gather {
@@ -101,47 +111,47 @@ class FUTURE::Node {
     }
 }
 
-class FUTURE::Block is FUTURE::Node {
+class FUTURE_Block is FUTURE_Node {
     has $.name;
     has @.vars is rw;
     has $.immediate is rw;
     has $.phaser is rw;
 
     method info { [~] ' -- ', $.name,
-                      (' [', @.vars»<name>.join(', '), ']' if @.vars) }
+                      (' [', @.vars.map(*.<name>).join(', '), ']' if @.vars) }
 }
 
-class FUTURE::Var   is FUTURE::Node {
+class FUTURE_Var   is FUTURE_Node {
     has $.name;
 
     method info { " -- $.name()" }
 }
 
-class FUTURE::Val   is FUTURE::Node {
+class FUTURE_Val   is FUTURE_Node {
     has $.value;
 
     method info { " -- $.value()" }
 }
 
-class FUTURE::Op    is FUTURE::Node {}
+class FUTURE_Op    is FUTURE_Node {}
 
-class FUTURE::Call  is FUTURE::Op {
+class FUTURE_Call  is FUTURE_Op {
     has $.name;
 
     method info { " -- $.name()" }
 }
 
-class FUTURE::Assign is FUTURE::Op {}
-class FUTURE::Bind   is FUTURE::Op {}
-class FUTURE::If     is FUTURE::Op {}
-class FUTURE::Unless is FUTURE::Op {}
-class FUTURE::While  is FUTURE::Op {}
-class FUTURE::Until  is FUTURE::Op {}
+class FUTURE_Assign is FUTURE_Op {}
+class FUTURE_Bind   is FUTURE_Op {}
+class FUTURE_If     is FUTURE_Op {}
+class FUTURE_Unless is FUTURE_Op {}
+class FUTURE_While  is FUTURE_Op {}
+class FUTURE_Until  is FUTURE_Op {}
 
 sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
     action($m, $key);
     for %($m).keys -> $key {
-        next if $key eq any @skip;
+        next if grep * == $key, @skip;
         given $m{$key} {
             when Match { traverse-top-down($_, :$key, :&action, :@skip) }
             when Array { traverse-top-down($_, :$key, :&action, :@skip)
@@ -189,7 +199,7 @@ class Yapsi::Perl6::Actions {
         my $block = @blockstack.pop;
         my $name = $block.name;
         $block.vars = @vars.list;
-        $block.children.push($<statementlist><statement>».ast.grep(*.defined));
+        $block.children.push($<statementlist><statement>.map(*.ast).grep(*.defined));
         make $block;
         if @blockstack {
             %block-parents{$name} = @blockstack[*-1];
@@ -216,7 +226,7 @@ class Yapsi::Perl6::Actions {
             make $<statement_control>.ast;
         }
         else { # the '' case
-            make FUTURE::Val.new(:value("Any"));    # we don't have Nil yet
+            make FUTURE_Val.new(:value("Any"));    # we don't have Nil yet
         }
     }
 
@@ -226,23 +236,23 @@ class Yapsi::Perl6::Actions {
     }
 
     method statement_control_if($/) {
-        make FUTURE::If.new(:children($<expression>.ast,
+        make FUTURE_If.new(:children($<expression>.ast,
                                       $<block>.ast,
-                                      $<else>[0].?ast));
+                                      ($<else>[0].^can('ast') ?? $<else>[0].ast !! ())));
     }
 
     method statement_control_unless($/) {
-        make FUTURE::Unless.new(:children($<expression>.ast,
+        make FUTURE_Unless.new(:children($<expression>.ast,
                                           $<block>.ast));
     }
 
     method statement_control_while($/) {
-        make FUTURE::While.new(:children($<expression>.ast,
+        make FUTURE_While.new(:children($<expression>.ast,
                                          $<block>.ast));
     }
 
     method statement_control_until($/) {
-        make FUTURE::Until.new(:children($<expression>.ast,
+        make FUTURE_Until.new(:children($<expression>.ast,
                                          $<block>.ast));
     }
 
@@ -282,9 +292,9 @@ class Yapsi::Perl6::Actions {
         else {  # subdecl
             my $name = '&' ~ $<subdecl><subname>;
             %!vars{$name} = @blockstack[*-1].name;
-            my $bind = FUTURE::Bind.new();
+            my $bind = FUTURE_Bind.new();
             $bind.children.push(
-                FUTURE::Var.new(:$name),
+                FUTURE_Var.new(:$name),
                 $<subdecl><block>.ast
             );
             @blockstack[*-1].children.push($bind);
@@ -294,44 +304,44 @@ class Yapsi::Perl6::Actions {
     method variable($/) {
         die qq[Variable "$/" used but not declared]
             if %!vars{~$/} eq 'declaration?';
-        unless %!vars.exists(~$/) {
+        unless %!vars{~$/}:exists { #NIECZA: no .exists method
             %!vars{~$/} = 'declaration?';
         }
 
-        make FUTURE::Var.new(:name(~$/));
+        make FUTURE_Var.new(:name(~$/));
     }
 
     method literal($/) {
-        make FUTURE::Val.new(:value(~$/));
+        make FUTURE_Val.new(:value(~$/));
     }
 
     method assignment($/) {
-        make FUTURE::Assign.new(:children($<lvalue>.ast, $<expression>.ast));
+        make FUTURE_Assign.new(:children($<lvalue>.ast, $<expression>.ast));
     }
 
     method binding($/) {
-        make FUTURE::Bind.new(:children($<lvalue>.ast, $<expression>.ast));
+        make FUTURE_Bind.new(:children($<lvalue>.ast, $<expression>.ast));
     }
 
     method saycall($/) {
-        make FUTURE::Call.new(:name('&say'), :children($<expression>.ast));
+        make FUTURE_Call.new(:name('&say'), :children($<expression>.ast));
     }
 
     method subcall($/) {
-        make FUTURE::Call.new(:name('&' ~ $<subname>),
+        make FUTURE_Call.new(:name('&' ~ $<subname>),
                               :children());
     }
 
     method increment($/) {
-        make FUTURE::Call.new(:name('&prefix:<++>'), :children($<value>.ast));
+        make FUTURE_Call.new(:name('&prefix:<++>'), :children($<value>.ast));
     }
 
     method decrement($/) {
-        make FUTURE::Call.new(:name('&prefix:<-->'), :children($<value>.ast));
+        make FUTURE_Call.new(:name('&prefix:<-->'), :children($<value>.ast));
     }
 
     method invocation($/) {
-        make FUTURE::Call.new(
+        make FUTURE_Call.new(
             :name('&postcircumfix:<( )>'),
             :children($<variable> ?? $<variable>.ast !! $<block>.ast)
         );
@@ -379,7 +389,7 @@ class Yapsi::Compiler {
         my @already-serialized;
 
         while @blocks-to-serialize > @already-serialized {
-            my $block = first { $_ ne any(@already-serialized) },
+            my $block = first -> $b { !grep * eq $b, @already-serialized },
                               @blocks-to-serialize;
             serialize $block;
             push @already-serialized, $block;
@@ -395,7 +405,7 @@ class Yapsi::Compiler {
 
         return @sic;
 
-        sub serialize(FUTURE::Block $block) {
+        sub serialize(FUTURE_Block $block) {
             push @sic, '';
             push @sic, "block '$block.name()':";
             for $block.vars.list -> $var {
@@ -416,9 +426,9 @@ class Yapsi::Compiler {
             }
         }
 
-        multi process(FUTURE::Call $call) {
+        multi process(FUTURE_Call $call) {
             if $call.children.elems {
-                process $call.children[0]; # a FUTURE::Expression
+                process $call.children[0]; # a FUTURE_Expression
             }
 
             given $call.name {
@@ -446,33 +456,33 @@ class Yapsi::Compiler {
                 default {
                     # This is slightly cannibalistic, but still better than
                     # code duplication
-                    process FUTURE::Var.new(:name($call.name));
+                    process FUTURE_Var.new(:name($call.name));
                     push @blocksic, "call $register";
                 }
             }
         }
 
-        multi process(FUTURE::Val $val) {
+        multi process(FUTURE_Val $val) {
             $register = unique-register;
             my $literal = $val.value;
             push @blocksic, "$register = $literal";
         }
 
-        multi process(FUTURE::Assign $assign) {
+        multi process(FUTURE_Assign $assign) {
             process $assign.children[1];
             my $expression-register = $register;
-            process $assign.children[0]; # FUTURE::Var
+            process $assign.children[0]; # FUTURE_Var
             $register = $expression-register;
             push @blocksic, "store $locator, $register";
         }
 
-        multi process(FUTURE::Bind $bind) {
+        multi process(FUTURE_Bind $bind) {
             process $bind.children[1];
             my $rightloc = $locator;
             my $expression-register = $register;
-            process $bind.children[0]; # FUTURE::Var
+            process $bind.children[0]; # FUTURE_Var
             $register = $expression-register;
-            if $bind.children[1] ~~ FUTURE::Var {
+            if $bind.children[1] ~~ FUTURE_Var {
                 push @blocksic, "bind $locator, $rightloc";
             }
             else {
@@ -480,7 +490,7 @@ class Yapsi::Compiler {
             }
         }
 
-        multi process(FUTURE::Var $var) {
+        multi process(FUTURE_Var $var) {
             $register = unique-register;
             my $b = $*current_block;
             my $level = 0;
@@ -504,10 +514,10 @@ class Yapsi::Compiler {
             push @blocksic, "$register = fetch $locator";
         }
 
-        multi process(FUTURE::Block $block) {
+        multi process(FUTURE_Block $block) {
             $register = unique-register;
             push @blocks-to-serialize, $block
-                unless any(@already-serialized) eq $block;
+                unless grep * eq $block, @already-serialized;
             if $block.phaser {
                 unshift @blocksic,
                     "$register = closure-from-block '$block.name()'",
@@ -522,7 +532,7 @@ class Yapsi::Compiler {
             }
         }
 
-        multi process(FUTURE::If $if) {
+        multi process(FUTURE_If $if) {
             process $if.children[0];
             my $after-if = unique-label;
             push @blocksic, "jf $register, $after-if";
@@ -544,7 +554,7 @@ class Yapsi::Compiler {
             }
         }
 
-        multi process(FUTURE::Unless $unless) {
+        multi process(FUTURE_Unless $unless) {
             process $unless.children[0];
             my $after-unless = unique-label;
             push @blocksic, "jt $register, $after-unless";
@@ -555,7 +565,7 @@ class Yapsi::Compiler {
             push @blocksic, "`label $after-unless";
         }
 
-        multi process(FUTURE::While $while) {
+        multi process(FUTURE_While $while) {
             my $before-while = unique-label;
             push @blocksic, "`label $before-while";
             process $while.children[0];
@@ -570,7 +580,7 @@ class Yapsi::Compiler {
                 "`label $after-while";
         }
 
-        multi process(FUTURE::Until $until) {
+        multi process(FUTURE_Until $until) {
             my $before-until = unique-label;
             push @blocksic, "`label $before-until";
             process $until.children[0];
@@ -604,7 +614,7 @@ class Yapsi::Compiler {
                         #      reguster names, since it gives false positives
                         #      for all prefixes
                         ++$usages-later
-                            if defined index(@instructions[$j], $varname);
+                            if defined @instructions[$j].index($varname);
                     }
                     if $usages-later {
                         push @decluttered, $line;
@@ -622,7 +632,7 @@ class Yapsi::Compiler {
             return @instructions.map: {
                 .subst( :global, / ('$' \d+) { $hack = ~$0 } /, {
                     my $varname = $hack;
-                    if !%mapping.exists($varname) {
+                    if !(%mapping{$varname}:exists) { # NIECZA no .exists
                         %mapping{$varname} = '$' ~ $number++;
                     }
                     %mapping{$varname}
@@ -635,7 +645,7 @@ class Yapsi::Compiler {
 class Value {
     has $.payload;
 
-    method store($v) { die "Cannot assign to a readonly value" }
+    method store($v) { die "Cannot assign to a readonly value" } #OK
 }
 
 class Container {
@@ -652,7 +662,7 @@ class Lexpad {
     has Lexpad $.outer;
 
     method Str {
-        "lexpad[" ~ %.names.sort(*.value)>>.key.join(", ") ~ "]";
+        "lexpad[" ~ %.names.sort({ $^a.value leg $^b.value }).map(*.key).join(", ") ~ "]";
     }
 }
 
@@ -677,11 +687,10 @@ sub find-label(@sic, $name) {
     die "Didn't find label $name";
 }
 
-subset Yapsi::IO where { .can('say') }
-
 class Yapsi::Runtime {
-    has Yapsi::IO $!io = $*OUT;
     has Lexpad $.current-lexpad;
+
+    method tick() {}
 
     method run(@sic) {
         # RAKUDO: Need to use 'not' here rather than '!~~' [perl #76892]
@@ -696,7 +705,8 @@ class Yapsi::Runtime {
         my @ip-stack;
 
         sub reg() { @registers-stack[@registers-stack - 1] }
-        sub n-up-from($lexpad is copy, $levels) {
+        sub n-up-from($lexpad_, $levels) {
+            my $lexpad = $lexpad_;
             $lexpad.=outer for ^$levels;
             die "Went too far and ended up nowhere"
                 unless defined $lexpad;
@@ -705,7 +715,8 @@ class Yapsi::Runtime {
 
         my $global-lexpad;
 
-        sub new-lexpad-from(@sic, $line is copy, Lexpad $outer?) {
+        sub new-lexpad-from(@sic, $line_, Lexpad $outer?) {
+            my $line = $line_;
             my (@vars, @slots);
             # RAKUDO: Some Any()s seem to end up in the @sic array. Hence the
             #         need for prefix:<~>. Would be interesting to learn where
@@ -715,7 +726,7 @@ class Yapsi::Runtime {
                 given $0 {
                     when "var" {
                         push @vars, ~$1;
-                        my $is-our-variable = ?( ':our' eq any $2>>.Str );
+                        my $is-our-variable = ?( grep ':our', @($2) );
                         my $container = $is-our-variable
                             ?? (.slots[.names{~$1}] given $global-lexpad)
                             !! Container.new;
@@ -724,7 +735,7 @@ class Yapsi::Runtime {
                     default { die "Unknown directive $0"; }
                 }
             }
-            return Lexpad.new(:@slots, :names((hash @vars.kv).invert), :$outer);
+            return Lexpad.new(:@slots, :names((my %hash = @vars.kv).invert), :$outer); #OK
         }
 
         try {
@@ -733,7 +744,7 @@ class Yapsi::Runtime {
         }
 
         $!current-lexpad = new-lexpad-from(@sic, 2);
-        self.?tick;
+        self.tick;
         my $ip = 3;
         while @registers-stack {
             while @sic[$ip++] -> $line {
@@ -746,7 +757,7 @@ class Yapsi::Runtime {
                         $lexpad.slots[$slot].store(
                             Value.new( :payload(reg[$register]) )
                         );
-                        self.?tick;
+                        self.tick;
                     }
                     when / ^ '$'(\d+)' = fetch '
                              '['[(0)||'-'(\d+)]', '(\d+)']' $ / {
@@ -764,14 +775,14 @@ class Yapsi::Runtime {
                             = n-up-from($!current-lexpad, $var2-levels);
                         $var1-lexpad.slots[$var1-slot]
                             = $var2-lexpad.slots[$var2-slot];
-                        self.?tick;
+                        self.tick;
                     }
                     when / ^ 'bind ['[(0)||'-'(\d+)]', '(\d+)'], $'(\d+) $ / {
                         my ($levels, $slot, $register) = +$0, +$1, +$2;
                         my $lexpad = n-up-from($!current-lexpad, $levels);
                         $lexpad.slots[$slot]
                             = Value.new( :payload(reg[$register]) );
-                        self.?tick;
+                        self.tick;
                     }
                     when / ^ 'inc $'(\d+) $ / {
                         reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] + 1;
@@ -783,17 +794,17 @@ class Yapsi::Runtime {
                         if reg[+$0] == 0 {
                             $ip = find-label(@sic, ~$1);
                         }
-                        self.?tick;
+                        self.tick;
                     }
                     when / ^ 'jt $'(\d+)', '(\S+) $ / {
                         if reg[+$0] != 0 {
                             $ip = find-label(@sic, ~$1);
                         }
-                        self.?tick;
+                        self.tick;
                     }
                     when / ^ 'jmp '(\S+) $ / {
                         $ip = find-label(@sic, ~$0);
-                        self.?tick;
+                        self.tick;
                     }
                     when / ^ '$'(\d+)' = closure-from-block '
                              \'(<-[']>+)\' $ / {
@@ -809,11 +820,11 @@ class Yapsi::Runtime {
                         $!current-lexpad
                             = new-lexpad-from(@sic, $ip, $closure.outer);
                         ++$ip;
-                        self.?tick;
+                        self.tick;
                     }
                     when / ^ 'say $'(\d+) $ / {
-                        $!io.say(reg[+$0]);
-                        self.?tick;
+                        say(reg[+$0]);
+                        self.tick;
                     }
                     default {
                         die "Unknown instruction: ", $_;

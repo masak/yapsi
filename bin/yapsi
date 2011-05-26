@@ -19,7 +19,7 @@ sub run-code($program, :$target) {
         }
 
         if $target eq 'run' {
-            my ::Yapsi::Runtime $runtime .= new;
+            my $runtime = ::Yapsi::Runtime.new;
             $runtime.run(@output);
         }
         else {
@@ -30,7 +30,7 @@ sub run-code($program, :$target) {
 }
 
 if @*ARGS && @*ARGS[0] eq '--version' {
-    my $revision = qx[git describe];
+    my $revision = "NIECZA";
     say "This is Yapsi, revision $revision";
     shift @*ARGS;
 }
