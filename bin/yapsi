@@ -18,7 +18,7 @@ sub run-code($program, :$target) {
         }
 
         if $target eq 'run' {
-            my $runtime = ::Yapsi::Runtime.new;
+            my ::Yapsi::Runtime $runtime .= new;
             $runtime.run(@output);
         }
         else {

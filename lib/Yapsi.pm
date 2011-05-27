@@ -227,8 +227,8 @@ class Yapsi::Perl6::Actions {
     }
 
     method statement_control($/) {
-        hoist $/, (<statement_control_if statement_control_unless
-                    statement_control_while statement_control_until>);
+        hoist $/, <statement_control_if statement_control_unless
+                   statement_control_while statement_control_until>;
     }
 
     method statement_control_if($/) {
@@ -253,8 +253,8 @@ class Yapsi::Perl6::Actions {
     }
 
     method expression($/) {
-        hoist $/, (<assignment literal saycall subcall variable declaration
-                    binding increment decrement invocation block phaser>);
+        hoist $/, <assignment literal saycall subcall variable declaration
+                   binding increment decrement invocation block phaser>;
     }
 
     method phaser($/) {
@@ -263,11 +263,11 @@ class Yapsi::Perl6::Actions {
     }
 
     method lvalue($/) {
-        hoist $/, (<declaration variable increment decrement>);
+        hoist $/, <declaration variable increment decrement>;
     }
 
     method value($/) {
-        hoist $/, (<variable declaration>);
+        hoist $/, <variable declaration>;
     }
 
     # The reason we temporarily store 'declaration?' in %!vars is that in a
@@ -610,7 +610,7 @@ class Yapsi::Compiler {
                         #      reguster names, since it gives false positives
                         #      for all prefixes
                         ++$usages-later
-                            if defined @instructions[$j].index($varname);
+                            if defined index(@instructions[$j], $varname);
                     }
                     if $usages-later {
                         push @decluttered, $line;
