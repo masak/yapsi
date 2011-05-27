@@ -728,7 +728,7 @@ class Yapsi::Runtime {
                     default { die "Unknown directive $0"; }
                 }
             }
-            return Lexpad.new(:@slots, :names((my %hash = map -> $a, $b { $b => $a }, @vars.kv)), :$outer); #OK
+            return Lexpad.new(:@slots, :names((hash @vars.kv).invert), :$outer);
         }
 
         try {
@@ -741,7 +741,7 @@ class Yapsi::Runtime {
         my $ip = 3;
         while @registers-stack {
             while my $line = @sic[$ip++] {
-                given substr($line,4) {
+                given $line.substr(4) {
                     when / ^ '`' / {}
                     when / ^ '$'(\d+) ' = ' (\d+) $ / { reg[+$0] = +$1 }
                     when / ^ 'store ['[(0)||'-'(\d+)]', '(\d+)'], $'(\d+) $ / {

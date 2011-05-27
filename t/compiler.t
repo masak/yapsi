@@ -44,7 +44,7 @@ my @programs-that-compile =
     'say 2; ENTER { say 1 }'
 ;
 
-sub escape($string) { $string.subst(/\n/, "\\n", :g) }
+sub escape($string) { $string.subst("\n", "\\n", :g) }
 
 for @programs-that-compile -> $program {
     my $can-compile = False;
