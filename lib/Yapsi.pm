@@ -698,8 +698,7 @@ class Yapsi::Runtime {
         my @ip-stack;
 
         sub reg() { @registers-stack[@registers-stack - 1] }
-        sub n-up-from($lexpad_, $levels) {
-            my $lexpad = $lexpad_;
+        sub n-up-from($lexpad is copy, $levels) {
             $lexpad.=outer for ^$levels;
             die "Went too far and ended up nowhere"
                 unless defined $lexpad;
@@ -708,8 +707,7 @@ class Yapsi::Runtime {
 
         my $global-lexpad;
 
-        sub new-lexpad-from(@sic, $line_, Lexpad $outer?) {
-            my $line = $line_;
+        sub new-lexpad-from(@sic, $line is copy, Lexpad $outer?) {
             my (@vars, @slots);
             # RAKUDO: Some Any()s seem to end up in the @sic array. Hence the
             #         need for prefix:<~>. Would be interesting to learn where
@@ -740,7 +738,7 @@ class Yapsi::Runtime {
         self.?tick;
         my $ip = 3;
         while @registers-stack {
-            while my $line = @sic[$ip++] {
+            while @sic[$ip++] -> $line {
                 given $line.substr(4) {
                     when / ^ '`' / {}
                     when / ^ '$'(\d+) ' = ' (\d+) $ / { reg[+$0] = +$1 }

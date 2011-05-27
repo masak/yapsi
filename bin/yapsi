@@ -49,7 +49,7 @@ elsif @*ARGS == 1 {
     run-code(slurp(@*ARGS[0]), :$target);
 }
 elsif @*ARGS == 0 {
-    while my $program = prompt(">>> ") {
+    while prompt(">>> ") -> $program {
         run-code($program, :$target);
     }
     say '';
