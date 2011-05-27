@@ -3,11 +3,12 @@ use v6;
 use Test;
 use Yapsi;
 
-my $out = "";
-my $io-collector = sub ($i) {$out ~= $i ~ "\n"};
+my $out;
+my $clear = method ($out is rw:) { $out = '' }
+my $io-collector = class { method say($i) {$out ~= $i ~ "\n"} };
 
-my $compiler = ::Yapsi::Compiler.new;
-my $runtime = ::Yapsi::Runtime.new( :io($io-collector) );
+my ::Yapsi::Compiler $compiler .= new;
+my ::Yapsi::Runtime $runtime .= new( :io($io-collector) );
 
 my @tests =
     'say 42',                          "42\n",      'printing',
@@ -56,7 +57,7 @@ my @tests =
 ;
 
 for @tests -> $program, $expected, $message {
-    $out = "";
+    $out.$clear;
     $runtime.run( $compiler.compile($program) );
 
     is $out, $expected, $message;

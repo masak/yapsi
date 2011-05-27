@@ -91,10 +91,8 @@ class FUTURE::Node {
         sub helper($node, $index) {
             take [~] '  ' x $index,
                      $node.WHAT.perl.subst(/^ .*? '::'/, ''),
-                     ($node.^can("info") ?? $node.info !! "");
-            if $node.^can("children") {
-                helper($_, $index + 1) for $node.children;
-            }
+                     $node.?info;
+            helper($_, $index + 1) for $node.?children;
         }
 
         return gather {
@@ -148,7 +146,7 @@ sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
             when Match { traverse-top-down($_, :$key, :&action, :@skip) }
             when List  { traverse-top-down($_, :$key, :&action, :@skip)
                             for .list }
-            default { die "Unknown thing $m.keys() / $key / $_.typename() in parse tree!" }
+            default { die "Unknown thing $_.WHAT() in parse tree!" }
         }
     }
 }
@@ -234,7 +232,7 @@ class Yapsi::Perl6::Actions {
     method statement_control_if($/) {
         make FUTURE::If.new(:children($<expression>.ast,
                                       $<block>.ast,
-                                      ($<else>[0].^can('ast') ?? $<else>[0].ast !! ())));
+                                      $<else>[0].?ast));
     }
 
     method statement_control_unless($/) {
@@ -684,10 +682,8 @@ sub find-label(@sic, $name) {
 }
 
 class Yapsi::Runtime {
-    has $.io = &say;
+    has $.io = $*OUT;
     has Lexpad $.current-lexpad;
-
-    method tick() {}
 
     method run(@sic) {
         # RAKUDO: Need to use 'not' here rather than '!~~' [perl #76892]
@@ -741,7 +737,7 @@ class Yapsi::Runtime {
         }
 
         $!current-lexpad = new-lexpad-from(@sic, 2);
-        self.tick;
+        self.?tick;
         my $ip = 3;
         while @registers-stack {
             while my $line = @sic[$ip++] {
@@ -754,7 +750,7 @@ class Yapsi::Runtime {
                         $lexpad.slots[$slot].store(
                             Value.new( :payload(reg[$register]) )
                         );
-                        self.tick;
+                        self.?tick;
                     }
                     when / ^ '$'(\d+)' = fetch '
                              '['[(0)||'-'(\d+)]', '(\d+)']' $ / {
@@ -772,14 +768,14 @@ class Yapsi::Runtime {
                             = n-up-from($!current-lexpad, $var2-levels);
                         $var1-lexpad.slots[$var1-slot]
                             = $var2-lexpad.slots[$var2-slot];
-                        self.tick;
+                        self.?tick;
                     }
                     when / ^ 'bind ['[(0)||'-'(\d+)]', '(\d+)'], $'(\d+) $ / {
                         my ($levels, $slot, $register) = +$0, +$1, +$2;
                         my $lexpad = n-up-from($!current-lexpad, $levels);
                         $lexpad.slots[$slot]
                             = Value.new( :payload(reg[$register]) );
-                        self.tick;
+                        self.?tick;
                     }
                     when / ^ 'inc $'(\d+) $ / {
                         reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] + 1;
@@ -791,17 +787,17 @@ class Yapsi::Runtime {
                         if reg[+$0] eq 'Any()' || reg[+$0] == 0 {
                             $ip = find-label(@sic, ~$1);
                         }
-                        self.tick;
+                        self.?tick;
                     }
                     when / ^ 'jt $'(\d+)', '(\S+) $ / {
                         if reg[+$0] ne 'Any()' && reg[+$0] != 0 {
                             $ip = find-label(@sic, ~$1);
                         }
-                        self.tick;
+                        self.?tick;
                     }
                     when / ^ 'jmp '(\S+) $ / {
                         $ip = find-label(@sic, ~$0);
-                        self.tick;
+                        self.?tick;
                     }
                     when / ^ '$'(\d+)' = closure-from-block '
                              \'(<-[']>+)\' $ / {
@@ -817,11 +813,11 @@ class Yapsi::Runtime {
                         $!current-lexpad
                             = new-lexpad-from(@sic, $ip, $closure.outer);
                         ++$ip;
-                        self.tick;
+                        self.?tick;
                     }
                     when / ^ 'say $'(\d+) $ / {
-                        self.io.(reg[+$0]);
-                        self.tick;
+                        $!io.say(reg[+$0]);
+                        self.?tick;
                     }
                     default {
                         die "Unknown instruction: ", $_;
