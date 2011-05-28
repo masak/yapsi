@@ -108,7 +108,7 @@ class FUTURE::Block is FUTURE::Node {
     has $.phaser is rw;
 
     method info { [~] ' -- ', $.name,
-                      (' [', @.vars.map(*.<name>).join(', '), ']' if @.vars) }
+                      (' [', @.vars»<name>.join(', '), ']' if @.vars) }
 }
 
 class FUTURE::Var   is FUTURE::Node {
@@ -193,7 +193,7 @@ class Yapsi::Perl6::Actions {
         my $block = @blockstack.pop;
         my $name = $block.name;
         $block.vars = @vars.list;
-        $block.children.push($<statementlist><statement>.map(*.ast).grep(*.^isa(FUTURE::Node)));
+        $block.children.push($<statementlist><statement>».ast.grep(*.^isa(FUTURE::Node)));
         make $block;
         if @blockstack {
             %block-parents{$name} = @blockstack[*-1];
@@ -656,7 +656,7 @@ class Lexpad {
     has Lexpad $.outer;
 
     method Str {
-        "lexpad[" ~ %.names.sort({ $^a.value leg $^b.value }).map(*.key).join(", ") ~ "]";
+        "lexpad[" ~ %.names.sort({ $^a.value leg $^b.value })>>.key.join(", ") ~ "]";
     }
 }
 
