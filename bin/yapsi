@@ -10,7 +10,7 @@ my $*PROGRAM_NAME = 'yapsi';
 sub run-code($program, :$target) {
     try {
         my @output;
-        given ::Yapsi::Compiler.new {
+        given Yapsi::Compiler.new {
             @output = $target eq 'future'
                         ?? .to-future($program)
                         !! .compile($program);
@@ -18,7 +18,7 @@ sub run-code($program, :$target) {
         }
 
         if $target eq 'run' {
-            my ::Yapsi::Runtime $runtime .= new;
+            my Yapsi::Runtime $runtime .= new;
             $runtime.run(@output);
         }
         else {
@@ -37,7 +37,7 @@ if @*ARGS && @*ARGS[0] eq '--version' {
 my $target = 'run';
 if @*ARGS && @*ARGS[0] ~~ /'--target='(\w+)/ {
     die "Recognized targets: {@TARGETS}"
-        unless @TARGETS.grep(* eq $0.lc);
+        unless $0.lc eq any @TARGETS;
     $target = $0.lc;
     shift @*ARGS;
 }

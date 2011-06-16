@@ -7,8 +7,8 @@ my $out;
 my $clear = method ($out is rw:) { $out = '' }
 my $io-collector = class { method say($i) {$out ~= $i ~ "\n"} };
 
-my ::Yapsi::Compiler $compiler .= new;
-my ::Yapsi::Runtime $runtime .= new( :io($io-collector) );
+my Yapsi::Compiler $compiler .= new;
+my Yapsi::Runtime $runtime .= new( :io($io-collector) );
 
 my @tests =
     'say 42',                          "42\n",      'printing',

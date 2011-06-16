@@ -2,7 +2,7 @@ use v6;
 
 use Test;
 use Yapsi;
-my $c = ::Yapsi::Compiler.new;
+my Yapsi::Compiler $c .= new;
 
 my @programs-that-compile =
     '',

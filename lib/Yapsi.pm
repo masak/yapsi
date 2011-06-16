@@ -141,7 +141,7 @@ class FUTURE::Until  is FUTURE::Op {}
 sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
     action($m, $key);
     for %($m).keys -> $key {
-        next if grep * eq $key, @skip;
+        next if $key eq any @skip;
         given $m{$key} {
             when Match { traverse-top-down($_, :$key, :&action, :@skip) }
             when List  { traverse-top-down($_, :$key, :&action, :@skip)
@@ -383,7 +383,7 @@ class Yapsi::Compiler {
         my @already-serialized;
 
         while @blocks-to-serialize > @already-serialized {
-            my $block = first -> $b { !grep * === $b, @already-serialized },
+            my $block = first { $_ !=== any(@already-serialized) },
                               @blocks-to-serialize;
             serialize $block;
             push @already-serialized, $block;
@@ -511,7 +511,7 @@ class Yapsi::Compiler {
         multi process(FUTURE::Block $block) {
             $register = unique-register;
             push @blocks-to-serialize, $block
-                unless grep * === $block, @already-serialized;
+                unless any(@already-serialized) === $block;
             if $block.phaser {
                 unshift @blocksic,
                     "$register = closure-from-block '$block.name()'",
@@ -656,7 +656,7 @@ class Lexpad {
     has Lexpad $.outer;
 
     method Str {
-        "lexpad[" ~ %.names.sort({ $^a.value leg $^b.value })>>.key.join(", ") ~ "]";
+        "lexpad[" ~ %.names.sort(*.value)>>.key.join(", ") ~ "]";
     }
 }
 
@@ -681,8 +681,10 @@ sub find-label(@sic, $name) {
     die "Didn't find label $name";
 }
 
+subset Yapsi::IO where { .can('say') }
+
 class Yapsi::Runtime {
-    has $.io = $*OUT;
+    has Yapsi::IO $.io = $*OUT;
     has Lexpad $.current-lexpad;
 
     method run(@sic) {
@@ -717,7 +719,7 @@ class Yapsi::Runtime {
                 given $0 {
                     when "var" {
                         push @vars, ~$1;
-                        my $is-our-variable = ?( grep ':our', @($2) );
+                        my $is-our-variable = ?( ':our' eq any $2>>.Str );
                         my $container = $is-our-variable
                             ?? (.slots[.names{~$1}] given $global-lexpad)
                             !! Container.new;
