@@ -676,7 +676,7 @@ sub find-label(@sic, $name) {
 subset Yapsi::IO where { .can('say') }
 
 class Yapsi::Runtime {
-    has Yapsi::IO $!io = $*OUT;
+    has Yapsi::IO $.io = $*OUT;
     has Lexpad $.current-lexpad;
 
     method run(@sic) {
