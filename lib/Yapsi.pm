@@ -173,7 +173,7 @@ class Yapsi::Perl6::Actions {
         if $key eq "declaration" {
             my $name = $m<variable> ?? ~$m<variable>
                                     !! '&' ~ $m<subdecl><subname>;
-            my $our = $m<declarator> eq 'our';
+            my $our = ($m<declarator> // '') eq 'our';
             push @vars, { :$name, :$our };
         }
     };
@@ -289,7 +289,7 @@ class Yapsi::Perl6::Actions {
 
     method variable($/) {
         die qq[Variable "$/" used but not declared]
-            if %!vars{~$/} eq 'declaration?';
+            if (%!vars{~$/} // '') eq 'declaration?';
         unless %!vars.exists(~$/) {
             %!vars{~$/} = 'declaration?';
         }
