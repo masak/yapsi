@@ -25,7 +25,7 @@ grammar Yapsi::Perl6::Grammar {
                   { push @blockstack,
                          FUTURE::Block.new( :name(unique-block()) ) }
                   <.ws> <statementlist> <.ws> '}' }
-    regex statementlist { <statement> ** <eat_terminator> }
+    regex statementlist { <statement> +% <eat_terminator> }
     token statement { <statement_control> || <expression> || '' }
     # RAKUDO: <?after '}'> NYRI [perl #76894]
     regex eat_terminator { <?{ $/.CURSOR.pos > 0
@@ -144,7 +144,7 @@ sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
         next if $key eq any @skip;
         given $m{$key} {
             when Match { traverse-top-down($_, :$key, :&action, :@skip) }
-            when Array { traverse-top-down($_, :$key, :&action, :@skip)
+            when Positional { traverse-top-down($_, :$key, :&action, :@skip)
                             for .list }
             default { die "Unknown thing $_.WHAT() in parse tree!" }
         }
