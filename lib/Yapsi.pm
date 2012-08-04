@@ -776,7 +776,7 @@ class Yapsi::Runtime {
                         reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] - 1;
                     }
                     when / ^ 'jf $'(\d+)', '(\S+) $ / {
-                        if reg[+$0] == 0 {
+                        if reg[+$0] eq 'Any()' or reg[+$0] == 0 {
                             $ip = find-label(@sic, ~$1);
                         }
                         self.?tick;
