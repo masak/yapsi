@@ -25,13 +25,9 @@ grammar Yapsi::Perl6::Grammar {
                   { push @blockstack,
                          FUTURE::Block.new( :name(unique-block()) ) }
                   <.ws> <statementlist> <.ws> '}' }
-    regex statementlist { <statement> ** <eat_terminator> }
+    regex statementlist { <statement> +% <eat_terminator> }
     token statement { <statement_control> || <expression> || '' }
-    # RAKUDO: <?after '}'> NYRI [perl #76894]
-    regex eat_terminator { <?{ $/.CURSOR.pos > 0
-                               && $_PROGRAM.substr($/.CURSOR.pos - 1, 1) eq '}'
-                           }> \n
-                           || <.ws> ';' }
+    regex eat_terminator { <?after '}'> \n || <.ws> ';' }
     token statement_control { <statement_control_if>
                               || <statement_control_unless>
                               || <statement_control_while>
@@ -144,7 +140,7 @@ sub traverse-top-down(Match $m, :$key = "TOP", :&action, :@skip) {
         next if $key eq any @skip;
         given $m{$key} {
             when Match { traverse-top-down($_, :$key, :&action, :@skip) }
-            when Array { traverse-top-down($_, :$key, :&action, :@skip)
+            when Positional { traverse-top-down($_, :$key, :&action, :@skip)
                             for .list }
             default { die "Unknown thing $_.WHAT() in parse tree!" }
         }
@@ -177,7 +173,7 @@ class Yapsi::Perl6::Actions {
         if $key eq "declaration" {
             my $name = $m<variable> ?? ~$m<variable>
                                     !! '&' ~ $m<subdecl><subname>;
-            my $our = $m<declarator> eq 'our';
+            my $our = ($m<declarator> // '') eq 'our';
             push @vars, { :$name, :$our };
         }
     };
@@ -293,7 +289,7 @@ class Yapsi::Perl6::Actions {
 
     method variable($/) {
         die qq[Variable "$/" used but not declared]
-            if %!vars{~$/} eq 'declaration?';
+            if (%!vars{~$/} // '') eq 'declaration?';
         unless %!vars.exists(~$/) {
             %!vars{~$/} = 'declaration?';
         }
@@ -680,7 +676,7 @@ sub find-label(@sic, $name) {
 subset Yapsi::IO where { .can('say') }
 
 class Yapsi::Runtime {
-    has Yapsi::IO $!io = $*OUT;
+    has Yapsi::IO $.io = $*OUT;
     has Lexpad $.current-lexpad;
 
     method run(@sic) {
@@ -780,7 +776,7 @@ class Yapsi::Runtime {
                         reg[+$0] = reg[+$0] eq 'Any()' ?? 1 !! reg[+$0] - 1;
                     }
                     when / ^ 'jf $'(\d+)', '(\S+) $ / {
-                        if reg[+$0] == 0 {
+                        if reg[+$0] eq 'Any()' or reg[+$0] == 0 {
                             $ip = find-label(@sic, ~$1);
                         }
                         self.?tick;
