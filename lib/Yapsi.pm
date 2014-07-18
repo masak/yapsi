@@ -290,7 +290,7 @@ class Yapsi::Perl6::Actions {
     method variable($/) {
         die qq[Variable "$/" used but not declared]
             if (%!vars{~$/} // '') eq 'declaration?';
-        unless %!vars.exists(~$/) {
+        if %!vars{~$/} :!exists {
             %!vars{~$/} = 'declaration?';
         }
 
@@ -618,7 +618,7 @@ class Yapsi::Compiler {
             return @instructions.map: {
                 .subst( :global, / ('$' \d+) { $hack = ~$0 } /, {
                     my $varname = $hack;
-                    if !%mapping.exists($varname) {
+                    if %mapping{$varname} :!exists {
                         %mapping{$varname} = '$' ~ $number++;
                     }
                     %mapping{$varname}
