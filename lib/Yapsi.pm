@@ -79,8 +79,8 @@ class FUTURE::Node {
         return self;
     }
 
-    method at_pos($index) {
-        return @!children.at_pos($index);
+    method AT-POS($index) {
+        return @!children.AT-POS($index);
     }
 
     method DEBUG() {
