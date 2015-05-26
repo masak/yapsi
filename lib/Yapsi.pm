@@ -26,7 +26,7 @@ grammar Yapsi::Perl6::Grammar {
                          FUTURE::Block.new( :name(unique-block()) ) }
                   <.ws> <statementlist> <.ws> '}' }
     regex statementlist { <statement>+ % <eat_terminator> }
-    token statement { <statement_control> || <expression> || '' }
+    token statement { <.ws> [<statement_control> || <expression> || ''] }
     regex eat_terminator { <?after '}'> \n || <.ws> ';' }
     token statement_control { <statement_control_if>
                               || <statement_control_unless>
