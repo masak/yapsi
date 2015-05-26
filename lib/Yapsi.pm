@@ -38,8 +38,8 @@ grammar Yapsi::Perl6::Grammar {
     rule  statement_control_while { 'while' <expression> <block> }
     rule  statement_control_until { 'until' <expression> <block> }
 
-    token expression { <assignment> || <binding> || <variable> || <literal>
-                       || <declaration> || <invocation> || <block> || <phaser>
+    token expression { <assignment> || <binding> || <invocation> || <variable> || <literal>
+                       || <declaration> || <block> || <phaser>
                        || <saycall> || <subcall> || <increment> || <decrement>
                      }
     rule phaser { 'ENTER' <block> }
