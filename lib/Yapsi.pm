@@ -185,7 +185,7 @@ class Yapsi::Perl6::Actions {
         my $block = @blockstack.pop;
         my $name = $block.name;
         $block.vars = @vars.list;
-        $block.children.push($<statementlist><statement>».ast.grep(*.defined));
+        $block.children.push: | $<statementlist><statement>».ast.grep(*.defined);
         make $block;
         if @blockstack {
             %block-parents{$name} = @blockstack[*-1];
@@ -688,7 +688,7 @@ class Yapsi::Runtime {
             die "SIC is $0 but this is $VERSION -- cannot run";
         }
 
-        my @registers-stack = [];
+        my @registers-stack = [[],];
         my @ip-stack;
 
         sub reg() { @registers-stack[@registers-stack - 1] }
