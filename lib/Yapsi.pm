@@ -75,7 +75,7 @@ class FUTURE::Node {
     has FUTURE::Node @.children is rw;
 
     method push(*@nodes) {
-        @!children.push(|@nodes);
+        @!children.append: @nodes;
         return self;
     }
 
@@ -186,7 +186,7 @@ class Yapsi::Perl6::Actions {
         my $block = @blockstack.pop;
         my $name = $block.name;
         $block.vars = @vars.list;
-        $block.children.push: | $<statementlist><statement>».ast.grep(*.defined);
+        $block.children.append: $<statementlist><statement>».ast.grep(*.defined);
         make $block;
         if @blockstack {
             %block-parents{$name} = @blockstack[*-1];
