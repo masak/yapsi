@@ -92,4 +92,4 @@ for @programs-that-don't-compile -> $pair { # '
         "'{escape $program}' gives error '$expected-error'";
 }
 
-done;
+done-testing;
