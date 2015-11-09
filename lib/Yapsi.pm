@@ -75,7 +75,7 @@ class FUTURE::Node {
     has FUTURE::Node @.children is rw;
 
     method push(*@nodes) {
-        @!children.push(|@nodes);
+        @!children.append: @nodes;
         return self;
     }
 
@@ -87,7 +87,8 @@ class FUTURE::Node {
         sub helper($node, $index) {
             take [~] '  ' x $index,
                      $node.WHAT.perl.subst(/^ .*? '::'/, ''),
-                     $node.?info;
+                     $node.?info || '';
+
             helper($_, $index + 1) for $node.?children;
         }
 
@@ -185,7 +186,7 @@ class Yapsi::Perl6::Actions {
         my $block = @blockstack.pop;
         my $name = $block.name;
         $block.vars = @vars.list;
-        $block.children.push($<statementlist><statement>».ast.grep(*.defined));
+        $block.children.append: $<statementlist><statement>».ast.grep(*.defined);
         make $block;
         if @blockstack {
             %block-parents{$name} = @blockstack[*-1];
@@ -224,7 +225,7 @@ class Yapsi::Perl6::Actions {
     method statement_control_if($/) {
         make FUTURE::If.new(:children($<expression>.ast,
                                       $<block>.ast,
-                                      $<else>[0].?ast));
+                                      $<else>.?ast));
     }
 
     method statement_control_unless($/) {
@@ -688,7 +689,7 @@ class Yapsi::Runtime {
             die "SIC is $0 but this is $VERSION -- cannot run";
         }
 
-        my @registers-stack = [];
+        my @registers-stack = [[],];
         my @ip-stack;
 
         sub reg() { @registers-stack[@registers-stack - 1] }
@@ -706,8 +707,11 @@ class Yapsi::Runtime {
             # RAKUDO: Some Any()s seem to end up in the @sic array. Hence the
             #         need for prefix:<~>. Would be interesting to learn where
             #         this happens.
-            while ~@sic[++$line]
-                    ~~ / '    `' (\S*) :s \'(<-[']>+)\' ( ':'\w+)* / {
+            while @sic[++$line] {
+                next unless @sic[$line] ~~ /
+                        \c[GRAVE ACCENT] (\S*) \s* \' ~ \' (<-[']>+) \s* (':'\w+)*
+                     /;
+                
                 given $0 {
                     when "var" {
                         push @vars, ~$1;
@@ -817,7 +821,7 @@ class Yapsi::Runtime {
                 }
             }
             pop @registers-stack;
-            $ip = pop @ip-stack;
+            $ip = @ip-stack && @ip-stack.pop ;
             $!current-lexpad.=outer;
         }
     }

@@ -1,58 +1,50 @@
 #!/usr/bin/env perl6
 use v6;
-
 use Yapsi;
 
-my @TARGETS = <run future sic>;
+constant @TARGETS = <run future sic>;
 
 sub run-code($program, :$target) {
+    state Yapsi::Compiler $compiler .= new;
+    state Yapsi::Runtime  $runtime  .= new;
+    
     try {
-        my @output;
-        given Yapsi::Compiler.new {
-            @output = $target eq 'future'
-                        ?? .to-future($program)
-                        !! .compile($program);
-            warn $_ for .warnings;
-        }
-
+        my @output = $target eq 'future'
+            ?? $compiler.to-future($program)
+            !! $compiler.compile($program);
+        warn $_ for $compiler.warnings;
+        
         if $target eq 'run' {
-            my Yapsi::Runtime $runtime .= new;
             $runtime.run(@output);
         }
         else {
             .say for @output;
         }
+        CATCH {
+            default {
+                say $_;
+            }
+        }
     }
-    say $! if $!;
 }
 
-if @*ARGS && @*ARGS[0] eq '--version' {
-    my $revision = qx[git describe];
-    say "This is Yapsi, revision $revision";
-    shift @*ARGS;
+multi MAIN(  Str $file-name
+           , Str :$target = 'run') {
+    run-code $file-name.IO.slurp, :$target;
 }
 
-my $target = 'run';
-if @*ARGS && @*ARGS[0] ~~ /'--target='(\w+)/ {
-    die "Recognized targets: {@TARGETS}"
-        unless $0.lc eq any @TARGETS;
-    $target = $0.lc;
-    shift @*ARGS;
+multi MAIN(  Str :e($programm)!
+           , Str :$target = 'run') {
+    
+    run-code $programm, :$target;
 }
 
-if @*ARGS == 2 && @*ARGS[0] eq '-e' {
-    run-code(@*ARGS[1], :$target);
-}
-elsif @*ARGS == 1 {
-    run-code(slurp(@*ARGS[0]), :$target);
-}
-elsif @*ARGS == 0 {
-    while prompt(">>> ") -> $program {
+multi MAIN(Str :$target = 'run') {
+    while defined my $program = prompt('>>> ') {
         run-code($program, :$target);
     }
-    say '';
 }
-else {
-    die
-      "Usage: `$*PROGRAM_NAME \[<file>\]` or `$*PROGRAM_NAME -e '<program>'`";
+
+sub USAGE {
+    say "Usage: $*PROGRAM-NAME [--target=<@TARGETS[]>] [-e=<expression>] <file-name>"
 }
