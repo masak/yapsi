@@ -1,6 +1,7 @@
 {
     "perl"        : "6.*",
     "name"        : "Yapsi",
+    "license"     : "Artistic-2.0",
     "version"     : "2011.02",
     "description" : "A Perl 6 compiler-and-runtime written in Perl 6",
     "provides"    : {
